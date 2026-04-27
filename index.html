@@ -16,26 +16,22 @@
         .rescan-btn { display: none; margin-top: 10px; width: 100%; font-weight: bold; }
         .btn-clear { background-color: #dc3545; border: none; color: white; margin-top: 20px; font-size: 0.8rem; opacity: 0.6; }
         
-        /* تنسيق زر الكتم المتطور */
-        .btn-mute-toggle { width: 100%; margin-top: 10px; font-weight: bold; padding: 10px; border-radius: 10px; border: none; transition: 0.3s; }
-        .bg-mute-on { background-color: #dc3545; color: white; } /* أحمر: شغال ويحتاج كتم */
-        .bg-mute-off { background-color: #10b981; color: white; } /* أخضر: مكتوم ويحتاج تشغيل */
+        /* تنسيق الزر الجديد */
+        #mute-btn { width: 100%; margin-top: 10px; font-weight: bold; padding: 12px; border-radius: 10px; border: none; font-size: 1.1rem; }
+        .btn-alarm-active { background-color: #dc3545; color: white; animation: pulse-red 1.5s infinite; }
+        .btn-alarm-muted { background-color: #10b981; color: white; }
 
-        .alert-box {
-            display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 9999; width: 90%; max-width: 450px; padding: 15px;
-            color: white; text-align: center; border-radius: 10px; 
-            box-shadow: 0 5px 15px rgba(0,0,0,0.5); font-weight: bold;
-        }
+        @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+
+        .alert-box { display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 450px; padding: 15px; color: white; text-align: center; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); font-weight: bold; }
         .alert-danger { background-color: #dc3545; }
-        .blink { animation: blinker 1s linear infinite; color: #ff4444 !important; }
+        .blink { animation: blinker 1s linear infinite; }
         @keyframes blinker { 50% { opacity: 0; } }
     </style>
 </head>
 <body onclick="startAudioContext()">
 
-<div id="stock-alert" class="alert-box alert-danger">الصنف المطلوب غير متوفر في المخزن.</div>
-<div id="temp-alert" class="alert-box alert-danger">⚠️ تنبيه: درجة الحرارة في المستودع مرتفعة جداً!</div>
+<div id="temp-alert" class="alert-box alert-danger blink">🚨 تحذير: خطر في المستودع! (حرارة أو دخان)</div>
 
 <div class="hero-section text-center">
     <h2>نظام إدارة مستودع الحاسب الآلي (صمام)</h2>
@@ -46,14 +42,6 @@
 </div>
 
 <div class="container">
-    <div class="row g-3 mb-4 text-center">
-        <div class="col-md col-6"><div class="stock-badge"><small>شواحن</small><span id="count-شواحن" class="stock-num">0</span></div></div>
-        <div class="col-md col-6"><div class="stock-badge"><small>طابعات</small><span id="count-طابعات" class="stock-num">0</span></div></div>
-        <div class="col-md col-6"><div class="stock-badge"><small>أحبار</small><span id="count-أحبار" class="stock-num">0</span></div></div>
-        <div class="col-md col-6"><div class="stock-badge"><small>حواسب</small><span id="count-حواسب" class="stock-num">0</span></div></div>
-        <div class="col-md col-12"><div class="stock-badge" style="border-color: #fbbf24;"><small>فارات/سماعات</small><span id="count-فارات" class="stock-num">0</span></div></div>
-    </div>
-
     <div class="row g-4">
         <div class="col-md-3">
             <div class="card card-custom p-3 text-center h-100">
@@ -62,46 +50,35 @@
                 <div class="mb-3"><small>الرطوبة</small><div class="sensor-val" style="color: #10b981;"><span id="hum">--</span>%</div></div>
                 <hr>
                 <div class="mb-2"><small>نسبة الدخان</small><div id="smoke-val" class="fw-bold" style="font-size: 1.5rem;">--</div></div>
-                <div id="fire-status" class="fw-bold p-2 rounded">بانتظار البيانات...</div>
+                <div id="fire-status" class="fw-bold p-2 rounded">تحميل...</div>
                 
-                <button id="mute-btn" onclick="toggleMute()" class="btn-mute-toggle bg-mute-on" style="display: none;">🔇 كتم صوت الإنذار</button>
+                <button id="mute-btn" onclick="toggleMute()" class="btn-alarm-active" style="display: none;">🔇 كتم الصوت</button>
                 
-                <button onclick="clearAllData()" class="btn btn-clear">🧹 تصفير السجل والمخزون</button>
+                <button onclick="clearAllData()" class="btn btn-clear">🧹 تصفير السجل</button>
             </div>
         </div>
 
         <div class="col-md-9">
-            <div class="card card-custom p-4 h-100">
+            <div class="row g-3 mb-4 text-center">
+                <div class="col-md col-6"><div class="stock-badge"><small>شواحن</small><span id="count-شواحن" class="stock-num">0</span></div></div>
+                <div class="col-md col-6"><div class="stock-badge"><small>طابعات</small><span id="count-طابعات" class="stock-num">0</span></div></div>
+                <div class="col-md col-6"><div class="stock-badge"><small>أحبار</small><span id="count-أحبار" class="stock-num">0</span></div></div>
+                <div class="col-md col-6"><div class="stock-badge"><small>حواسب</small><span id="count-حواسب" class="stock-num">0</span></div></div>
+                <div class="col-md col-12"><div class="stock-badge" style="border-color: #fbbf24;"><small>فارات/سماعات</small><span id="count-فارات" class="stock-num">0</span></div></div>
+            </div>
+
+            <div class="card card-custom p-4">
                 <div class="row">
                     <div class="col-md-5 text-center">
-                        <h6 class="mb-3 text-info">الماسح الآلي 📷</h6>
                         <div id="reader"></div>
                         <button id="rescanButton" onclick="startScanner()" class="btn btn-primary rescan-btn">مسح جديد 🔄</button>
                     </div>
                     <div class="col-md-7 border-start border-secondary">
-                        <h5>إدارة العمليات</h5>
-                        <div class="row g-3 mt-1">
-                            <div class="col-md-8">
-                                <label class="form-label">الصنف:</label>
-                                <select id="itemSelect" class="form-select bg-dark text-white border-secondary">
-                                    <option value="شواحن">شواحن لابتوب</option>
-                                    <option value="طابعات">طابعات ليزر</option>
-                                    <option value="أحبار">أحبار طابعات</option>
-                                    <option value="حواسب">أجهزة حاسب (PC)</option>
-                                    <option value="فارات">فارات وسماعات</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">الكمية:</label>
-                                <input type="number" id="qty" class="form-control bg-dark text-white border-secondary" value="1">
-                            </div>
-                            <div class="col-12">
-                                <input type="text" id="personName" class="form-control bg-dark text-white border-secondary" placeholder="المورد / المستلم">
-                            </div>
-                            <div class="col-12 d-flex gap-2">
-                                <button onclick="sendToFirebase('وارد')" class="btn btn-success flex-fill fw-bold">وارد</button>
-                                <button onclick="sendToFirebase('منصرف')" class="btn btn-danger flex-fill fw-bold">منصرف</button>
-                            </div>
+                        <div class="row g-3">
+                            <div class="col-md-8"><select id="itemSelect" class="form-select bg-dark text-white border-secondary"><option value="شواحن">شواحن لابتوب</option><option value="طابعات">طابعات ليزر</option><option value="أحبار">أحبار طابعات</option><option value="حواسب">أجهزة حاسب (PC)</option><option value="فارات">فارات وسماعات</option></select></div>
+                            <div class="col-md-4"><input type="number" id="qty" class="form-control bg-dark text-white" value="1"></div>
+                            <div class="col-12"><input type="text" id="personName" class="form-control bg-dark text-white" placeholder="المستلم"></div>
+                            <div class="col-12 d-flex gap-2"><button onclick="sendToFirebase('وارد')" class="btn btn-success flex-fill">وارد</button><button onclick="sendToFirebase('منصرف')" class="btn btn-danger flex-fill">منصرف</button></div>
                         </div>
                     </div>
                 </div>
@@ -111,12 +88,7 @@
         <div class="col-12 mt-3">
             <div class="card card-custom p-4 text-center">
                 <h5 class="mb-3 text-start">سجل المخزون 📝</h5>
-                <div class="table-responsive">
-                    <table class="table table-dark table-striped">
-                        <thead><tr><th>العملية</th><th>الصنف</th><th>الكمية</th><th>الجهة</th><th>الوقت</th></tr></thead>
-                        <tbody id="logs"></tbody>
-                    </table>
-                </div>
+                <div class="table-responsive"><table class="table table-dark table-striped"><thead><tr><th>العملية</th><th>الصنف</th><th>الكمية</th><th>الجهة</th><th>الوقت</th></tr></thead><tbody id="logs"></tbody></table></div>
             </div>
         </div>
     </div>
@@ -131,107 +103,93 @@
     const db = firebase.database();
 
     let audioCtx = null;
-    let alarmOscillator = null;
-    let isMutedManually = false;
+    let alarmOsc = null;
+    let localMute = false;
 
-    function startAudioContext() {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
+    function startAudioContext() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
 
     function playAlarm() {
-        if (!audioCtx || alarmOscillator || isMutedManually) return;
-        alarmOscillator = audioCtx.createOscillator();
-        let gainNode = audioCtx.createGain();
-        alarmOscillator.type = 'sawtooth';
-        alarmOscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
-        gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
-        alarmOscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        alarmOscillator.start();
-        
-        // تأثير صوت الويوي
-        setInterval(() => {
-            if(alarmOscillator && !isMutedManually) {
-                alarmOscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.4);
-                alarmOscillator.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.8);
-            }
-        }, 800);
+        if (!audioCtx || alarmOsc || localMute) return;
+        alarmOsc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        alarmOsc.type = 'sawtooth';
+        alarmOsc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        alarmOsc.connect(gain); gain.connect(audioCtx.destination);
+        alarmOsc.start();
+        // تأثير الصوت
+        setInterval(() => { if(alarmOsc && !localMute) { alarmOsc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.4); alarmOsc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.8); } }, 800);
     }
 
-    function stopAlarm() {
-        if (alarmOscillator) {
-            alarmOscillator.stop();
-            alarmOscillator = null;
-        }
-    }
+    function stopAlarm() { if (alarmOsc) { alarmOsc.stop(); alarmOsc = null; } }
 
-    // وظيفة زر الكتم/التشغيل الجديدة
+    // التحكم بالزر
     function toggleMute() {
-        isMutedManually = !isMutedManually;
+        localMute = !localMute;
+        db.ref("System/MutedByAdmin").set(localMute);
+        updateMuteButton();
+        if (localMute) stopAlarm(); else checkAndPlay();
+    }
+
+    function updateMuteButton() {
         const btn = document.getElementById('mute-btn');
-        
-        if (isMutedManually) {
-            stopAlarm();
+        if (localMute) {
             btn.innerText = "🔊 تشغيل الصوت";
-            btn.className = "btn-mute-toggle bg-mute-off";
-            db.ref("System/MutedByAdmin").set(true);
+            btn.className = "btn-alarm-muted";
         } else {
-            btn.innerText = "🔇 كتم صوت الإنذار";
-            btn.className = "btn-mute-toggle bg-mute-on";
-            db.ref("System/MutedByAdmin").set(false);
-            // إذا كانت الحرارة لسه عالية، شغل الصوت فوراً
-            db.ref("System/AlarmTrigger").once('value', (snap) => {
-                if(snap.val() === "ON") playAlarm();
-            });
+            btn.innerText = "🔇 كتم الصوت";
+            btn.className = "btn-alarm-active";
         }
     }
 
-    db.ref("WMS").on("value", (snapshot) => {
-        const data = snapshot.val() || {};
-        let t = parseFloat(data.Temperature) || 0;
+    function checkAndPlay() {
+        db.ref("System/AlarmTrigger").once('value', s => { if(s.val() === "ON" && !localMute) playAlarm(); });
+    }
+
+    // قراءة الحساسات (تم إصلاح الدخان)
+    db.ref("WMS").on("value", (s) => {
+        const data = s.val() || {};
+        const t = parseFloat(data.Temperature) || 0;
+        const h = parseFloat(data.Humidity) || 0;
+        const smoke = data.Smoke || 0;
+
         document.getElementById('temp').innerText = t;
-        document.getElementById('hum').innerText = data.Humidity || 0;
-        document.getElementById('smoke-val').innerText = data.Smoke || 0;
+        document.getElementById('hum').innerText = h;
+        document.getElementById('smoke-val').innerText = smoke;
 
-        if(t >= 30) {
-            document.getElementById('temp-alert').style.display = 'block';
+        let statusBox = document.getElementById('fire-status');
+        if(smoke < 400) { statusBox.innerText = "الجو صافي ✅"; statusBox.className = "fw-bold p-2 rounded bg-success text-white"; }
+        else { statusBox.innerText = "خطر حريق! 🔥"; statusBox.className = "fw-bold p-2 rounded bg-danger text-white blink"; }
+
+        if(t >= 30 || smoke >= 400) {
             db.ref("System/AlarmTrigger").set("ON");
+            document.getElementById('temp-alert').style.display = 'block';
         } else {
-            document.getElementById('temp-alert').style.display = 'none';
             db.ref("System/AlarmTrigger").set("OFF");
-            isMutedManually = false; // تصفير الكتم اليدوي إذا رجعت الحرارة طبيعية
+            document.getElementById('temp-alert').style.display = 'none';
+            // إذا رجع كل شيء طبيعي، نصفر الكتم عشان المرة الجاية
+            localMute = false;
             db.ref("System/MutedByAdmin").set(false);
+            updateMuteButton();
         }
     });
 
-    db.ref("System").on("value", (snapshot) => {
-        const sys = snapshot.val() || {};
+    db.ref("System").on("value", (s) => {
+        const sys = s.val() || {};
         const trigger = sys.AlarmTrigger === "ON";
-        const btn = document.getElementById('mute-btn');
-
-        if (trigger) {
-            btn.style.display = 'block';
-            if (!isMutedManually) playAlarm();
-        } else {
-            btn.style.display = 'none';
-            stopAlarm();
-        }
+        document.getElementById('mute-btn').style.display = trigger ? 'block' : 'none';
+        if (trigger && !localMute) playAlarm(); else stopAlarm();
     });
 
-    // باقي الوظائف الأصلية (بدون تعديل)
+    // الوظائف الباقية (مخزون وسجل)
     db.ref("Inventory").on("value", (s) => {
         const d = s.val() || {};
-        ["شواحن", "طابعات", "أحبار", "حواسب", "فارات"].forEach(i => {
-            document.getElementById(`count-${i}`).innerText = d[i] || 0;
-        });
+        ["شواحن", "طابعات", "أحبار", "حواسب", "فارات"].forEach(i => { document.getElementById(`count-${i}`).innerText = d[i] || 0; });
     });
 
     db.ref("Logs").limitToLast(10).on("value", (s) => {
-        const d = s.val();
-        let h = "";
-        if(d) Object.values(d).reverse().forEach(l => {
-            h += `<tr><td><span class="badge ${l.type === 'وارد' ? 'bg-success' : 'bg-danger'}">${l.type}</span></td><td>${l.item}</td><td>${l.qty}</td><td>${l.person}</td><td>${l.time}</td></tr>`;
-        });
+        const d = s.val(); let h = "";
+        if(d) Object.values(d).reverse().forEach(l => { h += `<tr><td><span class="badge ${l.type === 'وارد' ? 'bg-success' : 'bg-danger'}">${l.type}</span></td><td>${l.item}</td><td>${l.qty}</td><td>${l.person}</td><td>${l.time}</td></tr>`; });
         document.getElementById('logs').innerHTML = h;
     });
 
@@ -258,12 +216,7 @@
         db.ref("Logs").push({ item: i, qty: q, person: document.getElementById('personName').value || "سالم", type, time: new Date().toLocaleTimeString('ar-SA') });
     }
 
-    function clearAllData() {
-        if(confirm("تصفير المخزون والسجل؟")) {
-            db.ref("Inventory").remove();
-            db.ref("Logs").remove().then(() => { location.reload(); });
-        }
-    }
+    function clearAllData() { if(confirm("تصفير؟")) { db.ref("Inventory").remove(); db.ref("Logs").remove().then(() => location.reload()); } }
 </script>
 </body>
 </html>
