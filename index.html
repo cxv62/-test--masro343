@@ -102,23 +102,24 @@
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); 
     }
 
-    // دالة البييب الموحدة
+    // صوت السوبر ماركت المطور
     function playBeep() {
         try {
             let ctx = new (window.AudioContext || window.webkitAudioContext)();
-            let o = ctx.createOscillator(); let g = ctx.createGain();
-            o.type = "sine"; o.frequency.setValueAtTime(800, ctx.currentTime);
-            g.gain.setValueAtTime(0.1, ctx.currentTime);
+            let o = ctx.createOscillator();
+            let g = ctx.createGain();
+            o.type = "sine"; 
+            o.frequency.setValueAtTime(1000, ctx.currentTime); // تردد عالي وحاد
+            g.gain.setValueAtTime(0.2, ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.08); // تلاشي سريع جداً للبييب
             o.connect(g); g.connect(ctx.destination);
-            o.start(); o.stop(ctx.currentTime + 0.1);
+            o.start(); o.stop(ctx.currentTime + 0.08);
         } catch(e) {}
     }
 
-    // مراقبة المسح من أجهزة أخرى (لسماع الصوت في كل مكان)
+    // مراقبة المسح من كل الأجهزة
     db.ref("System/LastScanTime").on("value", (snapshot) => {
-        if (snapshot.exists()) {
-            playBeep(); // تشغيل الصوت عند حدوث أي عملية مسح
-        }
+        if (snapshot.exists()) { playBeep(); }
     });
 
     function playAlarm() {
@@ -196,9 +197,7 @@
         scannerObj.render((text) => {
             if (isScanning) {
                 isScanning = false;
-                // إرسال إشارة للفايربيس لتشغيل الصوت في كل الأجهزة
                 db.ref("System/LastScanTime").set(firebase.database.ServerValue.TIMESTAMP);
-                
                 let p = text.split(',');
                 if(p.length === 4) {
                     document.getElementById('itemSelect').value = p[0].trim();
@@ -206,7 +205,7 @@
                     document.getElementById('personName').value = p[2].trim();
                     sendToFirebase(p[3].trim());
                     scannerObj.clear().then(() => { document.getElementById('rescanButton').style.display = 'block'; });
-                } else { alert("خطأ في الباركود!"); isScanning = true; }
+                } else { alert("خطأ!"); isScanning = true; }
             }
         });
     }
