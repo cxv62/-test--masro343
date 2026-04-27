@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>نظام إدارة مستودع الحاسب الآلي - صمام</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body { background-color: #0b0f19; color: #f8fafc; font-family: 'Segoe UI', Tahoma; }
+        .hero-section { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 25px; border-bottom: 3px solid #38bdf8; margin-bottom: 20px; }
+        .card-custom { background: #1e293b; border: none; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .sensor-val { font-size: 2rem; font-weight: bold; color: #38bdf8; }
+        .stock-badge { background: #0f172a; border: 1px solid #38bdf8; border-radius: 10px; padding: 10px; text-align: center; }
+        .stock-num { display: block; font-size: 1.5rem; font-weight: bold; color: #38bdf8; }
+        #reader { width: 100%; border-radius: 10px; overflow: hidden; background: #000; border: 2px solid #38bdf8; min-height: 250px; }
+        .rescan-btn { display: none; margin: 15px auto; width: 80%; font-weight: bold; }
+        .btn-clear { background-color: #dc3545; border: none; color: white; margin-top: 20px; font-size: 0.8rem; opacity: 0.6; }
+        #mute-btn { width: 100%; margin-top: 10px; font-weight: bold; padding: 12px; border-radius: 10px; border: none; font-size: 1.1rem; }
+        .btn-alarm-active { background-color: #dc3545; color: white; animation: pulse-red 1.5s infinite; cursor: pointer; }
+        .btn-alarm-muted { background-color: #10b981; color: white; cursor: pointer; }
+        @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+        .alert-box { display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 450px; padding: 15px; color: white; text-align: center; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); font-weight: bold; }
+        .alert-danger { background-color: #dc3545; }
+        .blink { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+    </style>
+</head>
+<body onclick="startAudioContext()">
+
+<div id="temp-alert" class="alert-box alert-danger blink">🚨 تنبيه: تجاوز الحدود الآمنة في المستودع!</div>
+
+<div class="hero-section text-center">
+    <h2>نظام إدارة مستودع الحاسب الآلي (صمام)</h2>
+    <div class="names-list mx-auto mt-2" style="max-width: 950px; font-size: 0.85rem; border: 1px solid #38bdf8; padding: 10px; border-radius: 10px;">
+        <strong>فريق العمل:</strong> سالم رفق العنزي | خالد محمد | عبد الله سعد | طلال شاكر | محمد ماين | أحمد علاوي | البراء | صالح سلمان | سطام سليمان | نواف منيف | عبد المجيد عيد | عبد الرحمن فارس | رعد العويضه
+    </div>
+</div>
+
+<div class="container">
+    <div class="row g-4">
+        <div class="col-md-3">
+            <div class="card card-custom p-3 text-center h-100">
+                <h5 class="mb-3 border-bottom pb-2 text-info">الرقابة البيئية 📡</h5>
+                <div class="mb-3"><small>الحرارة</small><div class="sensor-val"><span id="temp">0.0</span>°C</div></div>
+                <div class="mb-3"><small>الرطوبة</small><div class="sensor-val" style="color: #10b981;"><span id="hum">0.0</span>%</div></div>
+                <hr>
+                <div class="mb-2"><small>نسبة الدخان</small><div id="smoke-val" class="fw-bold" style="font-size: 1.5rem;">0</div></div>
+                <div id="fire-status" class="fw-bold p-2 rounded bg-success text-white">الجو صافي ✅</div>
+                <button id="mute-btn" onclick="toggleMute()" class="btn-alarm-active" style="display: none;">🔇 كتم الصوت</button>
+                <button onclick="clearAllData()" class="btn btn-clear">🧹 تصفير السجل</button>
+            </div>
+        </div>
+
+        <div class="col-md-9">
+            <div class="row g-3 mb-4 text-center">
+                <div class="col-md col-6"><div class="stock-badge"><small>شواحن</small><span id="count-شواحن" class="stock-num">0</span></div></div>
+                <div class="col-md col-6"><div class="stock-badge"><small>طابعات</small><span id="count-طابعات" class="stock-num">0</span></div></div>
+                <div class="col-md col-6"><div class="stock-badge"><small>أحبار</small><span id="count-أحبار" class="stock-num">0</span></div></div>
+                <div class="col-md col-6"><div class="stock-badge"><small>حواسب</small><span id="count-حواسب" class="stock-num">0</span></div></div>
+                <div class="col-md col-12"><div class="stock-badge" style="border-color: #fbbf24;"><small>فارات/سماعات</small><span id="count-فارات" class="stock-num">0</span></div></div>
+            </div>
+
+            <div class="card card-custom p-4">
+                <div class="row">
+                    <div class="col-md-5 text-center">
+                        <div id="reader"></div>
+                        <button id="rescanButton" onclick="startScanner()" class="btn btn-primary rescan-btn">مسح جديد 🔄</button>
+                    </div>
+                    <div class="col-md-7 border-start border-secondary">
+                        <div class="row g-3">
+                            <div class="col-md-8"><select id="itemSelect" class="form-select bg-dark text-white border-secondary"><option value="شواحن">شواحن لابتوب</option><option value="طابعات">طابعات ليزر</option><option value="أحبار">أحبار طابعات</option><option value="حواسب">أجهزة حاسب (PC)</option><option value="فارات">فارات وسماعات</option></select></div>
+                            <div class="col-md-4"><input type="number" id="qty" class="form-control bg-dark text-white" value="1"></div>
+                            <div class="col-12"><input type="text" id="personName" class="form-control bg-dark text-white" placeholder="المستلم"></div>
+                            <div class="col-12 d-flex gap-2"><button onclick="sendToFirebase('وارد')" class="btn btn-success flex-fill">وارد</button><button onclick="sendToFirebase('منصرف')" class="btn btn-danger flex-fill">منصرف</button></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 mt-3">
+            <div class="card card-custom p-4 text-center">
+                <h5 class="mb-3 text-start">سجل المخزون 📝</h5>
+                <div class="table-responsive"><table class="table table-dark table-striped"><thead><tr><th>العملية</th><th>الصنف</th><th>الكمية</th><th>الجهة</th><th>الوقت</th></tr></thead><tbody id="logs"></tbody></table></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+<script>
+    const firebaseConfig = { databaseURL: "https://mashro3-be2b3-default-rtdb.firebaseio.com/" };
+    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+    const db = firebase.database();
+
+    let audioCtx = null, alarmOsc = null, localMute = false;
+    let scannerObj = null, isScanning = true;
+
+    function startAudioContext() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+
+    function playBeep() {
+        try {
+            let ctx = new (window.AudioContext || window.webkitAudioContext)();
+            let o = ctx.createOscillator(); let g = ctx.createGain();
+            o.type = "sine"; o.frequency.setValueAtTime(800, ctx.currentTime);
+            g.gain.setValueAtTime(0.1, ctx.currentTime);
+            o.connect(g); g.connect(ctx.destination);
+            o.start(); o.stop(ctx.currentTime + 0.1);
+        } catch(e) {}
+    }
+
+    function playAlarm() {
+        if (!audioCtx || alarmOsc || localMute) return;
+        alarmOsc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        alarmOsc.type = 'sawtooth';
+        alarmOsc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        alarmOsc.connect(gain); gain.connect(audioCtx.destination);
+        alarmOsc.start();
+        setInterval(() => { if(alarmOsc && !localMute) { alarmOsc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.4); alarmOsc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.8); } }, 800);
+    }
+
+    function stopAlarm() { if (alarmOsc) { alarmOsc.stop(); alarmOsc = null; } }
+
+    function toggleMute() {
+        localMute = !localMute;
+        db.ref("System/MutedByAdmin").set(localMute);
+        updateMuteButton();
+        if (localMute) stopAlarm(); else checkAndPlay();
+    }
+
+    function updateMuteButton() {
+        const btn = document.getElementById('mute-btn');
+        btn.innerText = localMute ? "🔊 تشغيل الصوت" : "🔇 كتم الصوت";
+        btn.className = localMute ? "btn-alarm-muted" : "btn-alarm-active";
+    }
+
+    function checkAndPlay() { db.ref("System/AlarmTrigger").once('value', s => { if(s.val() === "ON" && !localMute) playAlarm(); }); }
+
+    // قراءة الحساسات - تم التأكد من الربط
+    db.ref("WMS").on("value", (s) => {
+        const d = s.val() || {};
+        const t = parseFloat(d.Temperature) || 0;
+        const h = parseFloat(d.Humidity) || 0;
+        const sm = d.Smoke || 0;
+
+        document.getElementById('temp').innerText = t.toFixed(1);
+        document.getElementById('hum').innerText = h.toFixed(1);
+        document.getElementById('smoke-val').innerText = sm;
+
+        const statusBox = document.getElementById('fire-status');
+        const alertBox = document.getElementById('temp-alert');
+        
+        if(t >= 30 || sm >= 400 || h >= 65) {
+            db.ref("System/AlarmTrigger").set("ON");
+            alertBox.style.display = 'block';
+            statusBox.innerText = h >= 65 ? "🚨 رطوبة عالية!" : "🚨 حالة طوارئ!";
+            statusBox.className = "fw-bold p-2 rounded bg-danger text-white blink";
+        } else {
+            db.ref("System/AlarmTrigger").set("OFF");
+            alertBox.style.display = 'none';
+            statusBox.innerText = "الجو صافي ✅";
+            statusBox.className = "fw-bold p-2 rounded bg-success text-white";
+        }
+    });
+
+    db.ref("System").on("value", (s) => {
+        const sys = s.val() || {};
+        const trigger = sys.AlarmTrigger === "ON";
+        document.getElementById('mute-btn').style.display = trigger ? 'block' : 'none';
+        if (trigger && !localMute) playAlarm(); else stopAlarm();
+    });
+
+    db.ref("Inventory").on("value", (s) => {
+        const d = s.val() || {};
+        ["شواحن", "طابعات", "أحبار", "حواسب", "فارات"].forEach(i => { 
+            document.getElementById(`count-${i}`).innerText = d[i] || 0; 
+        });
+    });
+
+    db.ref("Logs").limitToLast(10).on("value", (s) => {
+        const d = s.val(); let html = "";
+        if(d) Object.values(d).reverse().forEach(l => { 
+            html += `<tr><td><span class="badge ${l.type === 'وارد' ? 'bg-success' : 'bg-danger'}">${l.type}</span></td><td>${l.item}</td><td>${l.qty}</td><td>${l.person}</td><td>${l.time}</td></tr>`; 
+        });
+        document.getElementById('logs').innerHTML = html;
+    });
+
+    function startScanner() {
+        isScanning = true;
+        document.getElementById('rescanButton').style.display = 'none';
+        if (scannerObj) { scannerObj.clear(); }
+        scannerObj = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        scannerObj.render((text) => {
+            if (isScanning) {
+                isScanning = false;
+                playBeep();
+                let p = text.split(',');
+                if(p.length === 4) {
+                    document.getElementById('itemSelect').value = p[0].trim();
+                    document.getElementById('qty').value = p[1].trim();
+                    document.getElementById('personName').value = p[2].trim();
+                    sendToFirebase(p[3].trim());
+                    scannerObj.clear().then(() => { document.getElementById('rescanButton').style.display = 'block'; });
+                } else { alert("خطأ في الباركود!"); isScanning = true; }
+            }
+        });
+    }
+
+    window.onload = () => { startScanner(); };
+
+    function sendToFirebase(type) {
+        let i = document.getElementById('itemSelect').value, q = parseInt(document.getElementById('qty').value) || 0;
+        db.ref(`Inventory/${i}`).transaction(c => (type === 'وارد' ? (c||0)+q : (c||0)-q));
+        db.ref("Logs").push({ item: i, qty: q, person: document.getElementById('personName').value || "سالم", type, time: new Date().toLocaleTimeString('ar-SA') });
+    }
+
+    function clearAllData() { if(confirm("تصفير السجل والمخزون؟")) { db.ref("Inventory").remove(); db.ref("Logs").remove().then(() => location.reload()); } }
+</script>
+</body>
+</html>
