@@ -16,8 +16,11 @@
         .rescan-btn { display: none; margin-top: 10px; width: 100%; font-weight: bold; }
         .btn-clear { background-color: #dc3545; border: none; color: white; margin-top: 20px; font-size: 0.8rem; opacity: 0.6; }
         
-        /* إضافة زر الكتم وتنسيق التنبيهات */
-        .btn-mute { background-color: #f59e0b; color: #000; font-weight: bold; width: 100%; margin-top: 10px; display: none; }
+        /* تنسيق زر الكتم المتطور */
+        .btn-mute-toggle { width: 100%; margin-top: 10px; font-weight: bold; padding: 10px; border-radius: 10px; border: none; transition: 0.3s; }
+        .bg-mute-on { background-color: #dc3545; color: white; } /* أحمر: شغال ويحتاج كتم */
+        .bg-mute-off { background-color: #10b981; color: white; } /* أخضر: مكتوم ويحتاج تشغيل */
+
         .alert-box {
             display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
             z-index: 9999; width: 90%; max-width: 450px; padding: 15px;
@@ -25,14 +28,14 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.5); font-weight: bold;
         }
         .alert-danger { background-color: #dc3545; }
-        .alert-warning { background-color: #f59e0b; color: #000; }
         .blink { animation: blinker 1s linear infinite; color: #ff4444 !important; }
         @keyframes blinker { 50% { opacity: 0; } }
     </style>
 </head>
-<body onclick="startAudioContext()"> <div id="stock-alert" class="alert-box alert-danger">الصنف المطلوب غير متوفر في المخزن.</div>
+<body onclick="startAudioContext()">
+
+<div id="stock-alert" class="alert-box alert-danger">الصنف المطلوب غير متوفر في المخزن.</div>
 <div id="temp-alert" class="alert-box alert-danger">⚠️ تنبيه: درجة الحرارة في المستودع مرتفعة جداً!</div>
-<div id="hum-alert" class="alert-box alert-warning">⚠️ تنبيه: مستوى الرطوبة عالٍ في المستودع!</div>
 
 <div class="hero-section text-center">
     <h2>نظام إدارة مستودع الحاسب الآلي (صمام)</h2>
@@ -61,7 +64,7 @@
                 <div class="mb-2"><small>نسبة الدخان</small><div id="smoke-val" class="fw-bold" style="font-size: 1.5rem;">--</div></div>
                 <div id="fire-status" class="fw-bold p-2 rounded">بانتظار البيانات...</div>
                 
-                <button id="mute-btn" onclick="muteSystem()" class="btn btn-mute">🔇 إيقاف صوت الإنذار</button>
+                <button id="mute-btn" onclick="toggleMute()" class="btn-mute-toggle bg-mute-on" style="display: none;">🔇 كتم صوت الإنذار</button>
                 
                 <button onclick="clearAllData()" class="btn btn-clear">🧹 تصفير السجل والمخزون</button>
             </div>
@@ -127,35 +130,30 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    let currentStock = {};
     let audioCtx = null;
     let alarmOscillator = null;
+    let isMutedManually = false;
 
-    // تفعيل محرك الصوت (لازم تضغط في أي مكان بالموقع مرة وحدة)
     function startAudioContext() {
-        if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
 
-    // وظيفة توليد صوت الويوي (بدون روابط خارجية)
     function playAlarm() {
-        if (!audioCtx || alarmOscillator) return;
+        if (!audioCtx || alarmOscillator || isMutedManually) return;
         alarmOscillator = audioCtx.createOscillator();
         let gainNode = audioCtx.createGain();
         alarmOscillator.type = 'sawtooth';
         alarmOscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
-        alarmOscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.5);
-        alarmOscillator.loop = true;
-        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
         alarmOscillator.connect(gainNode);
         gainNode.connect(audioCtx.destination);
         alarmOscillator.start();
-        // تكرار تردد الويوي
+        
+        // تأثير صوت الويوي
         setInterval(() => {
-            if(alarmOscillator) {
-                alarmOscillator.frequency.rampToValueAtTime(880, audioCtx.currentTime + 0.4);
-                alarmOscillator.frequency.rampToValueAtTime(440, audioCtx.currentTime + 0.8);
+            if(alarmOscillator && !isMutedManually) {
+                alarmOscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.4);
+                alarmOscillator.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.8);
             }
         }, 800);
     }
@@ -167,85 +165,97 @@
         }
     }
 
-    db.ref("Inventory").on("value", (snapshot) => {
-        const data = snapshot.val() || {};
-        currentStock = data;
-        ["شواحن", "طابعات", "أحبار", "حواسب", "فارات"].forEach(item => {
-            document.getElementById(`count-${item}`).innerText = data[item] || 0;
-        });
-    });
-
-    db.ref("WMS").on("value", (snapshot) => {
-        const data = snapshot.val();
-        if(data) {
-            let t = parseFloat(data.Temperature) || 0;
-            let h = parseFloat(data.Humidity) || 0;
-            let smoke = data.Smoke || 0;
-            document.getElementById('temp').innerText = t;
-            document.getElementById('hum').innerText = h;
-            document.getElementById('smoke-val').innerText = smoke;
-
-            if(t >= 30) {
-                document.getElementById('temp-alert').style.display = 'block';
-                db.ref("System/AlarmTrigger").set("ON");
-            } else {
-                document.getElementById('temp-alert').style.display = 'none';
-                db.ref("System/AlarmTrigger").set("OFF");
-                db.ref("System/MutedByAdmin").set(false);
-            }
-        }
-    });
-
-    // مراقبة حالة الصوت
-    db.ref("System").on("value", (snapshot) => {
-        const sys = snapshot.val() || {};
-        if (sys.AlarmTrigger === "ON" && !sys.MutedByAdmin) {
-            playAlarm();
-            document.getElementById('mute-btn').style.display = 'block';
-        } else {
+    // وظيفة زر الكتم/التشغيل الجديدة
+    function toggleMute() {
+        isMutedManually = !isMutedManually;
+        const btn = document.getElementById('mute-btn');
+        
+        if (isMutedManually) {
             stopAlarm();
-            if (sys.AlarmTrigger !== "ON") document.getElementById('mute-btn').style.display = 'none';
-        }
-    });
-
-    function muteSystem() { db.ref("System/MutedByAdmin").set(true); }
-
-    db.ref("Logs").limitToLast(10).on("value", (snapshot) => {
-        const data = snapshot.val();
-        let html = "";
-        if(data) {
-            Object.values(data).reverse().forEach(log => {
-                html += `<tr><td><span class="badge ${log.type === 'وارد' ? 'bg-success' : 'bg-danger'}">${log.type}</span></td><td>${log.item}</td><td>${log.qty}</td><td>${log.person}</td><td>${log.time}</td></tr>`;
+            btn.innerText = "🔊 تشغيل الصوت";
+            btn.className = "btn-mute-toggle bg-mute-off";
+            db.ref("System/MutedByAdmin").set(true);
+        } else {
+            btn.innerText = "🔇 كتم صوت الإنذار";
+            btn.className = "btn-mute-toggle bg-mute-on";
+            db.ref("System/MutedByAdmin").set(false);
+            // إذا كانت الحرارة لسه عالية، شغل الصوت فوراً
+            db.ref("System/AlarmTrigger").once('value', (snap) => {
+                if(snap.val() === "ON") playAlarm();
             });
-        }
-        document.getElementById('logs').innerHTML = html;
-    });
-
-    let scanner;
-    function onScanSuccess(decodedText) {
-        let parts = decodedText.split(',');
-        if(parts.length === 4) {
-            let [item, amount, source, action] = parts.map(p => p.trim());
-            document.getElementById('itemSelect').value = item;
-            document.getElementById('qty').value = amount;
-            document.getElementById('personName').value = source;
-            sendToFirebase(action);
         }
     }
 
+    db.ref("WMS").on("value", (snapshot) => {
+        const data = snapshot.val() || {};
+        let t = parseFloat(data.Temperature) || 0;
+        document.getElementById('temp').innerText = t;
+        document.getElementById('hum').innerText = data.Humidity || 0;
+        document.getElementById('smoke-val').innerText = data.Smoke || 0;
+
+        if(t >= 30) {
+            document.getElementById('temp-alert').style.display = 'block';
+            db.ref("System/AlarmTrigger").set("ON");
+        } else {
+            document.getElementById('temp-alert').style.display = 'none';
+            db.ref("System/AlarmTrigger").set("OFF");
+            isMutedManually = false; // تصفير الكتم اليدوي إذا رجعت الحرارة طبيعية
+            db.ref("System/MutedByAdmin").set(false);
+        }
+    });
+
+    db.ref("System").on("value", (snapshot) => {
+        const sys = snapshot.val() || {};
+        const trigger = sys.AlarmTrigger === "ON";
+        const btn = document.getElementById('mute-btn');
+
+        if (trigger) {
+            btn.style.display = 'block';
+            if (!isMutedManually) playAlarm();
+        } else {
+            btn.style.display = 'none';
+            stopAlarm();
+        }
+    });
+
+    // باقي الوظائف الأصلية (بدون تعديل)
+    db.ref("Inventory").on("value", (s) => {
+        const d = s.val() || {};
+        ["شواحن", "طابعات", "أحبار", "حواسب", "فارات"].forEach(i => {
+            document.getElementById(`count-${i}`).innerText = d[i] || 0;
+        });
+    });
+
+    db.ref("Logs").limitToLast(10).on("value", (s) => {
+        const d = s.val();
+        let h = "";
+        if(d) Object.values(d).reverse().forEach(l => {
+            h += `<tr><td><span class="badge ${l.type === 'وارد' ? 'bg-success' : 'bg-danger'}">${l.type}</span></td><td>${l.item}</td><td>${l.qty}</td><td>${l.person}</td><td>${l.time}</td></tr>`;
+        });
+        document.getElementById('logs').innerHTML = h;
+    });
+
+    let scanner;
     function startScanner() {
         document.getElementById('rescanButton').style.display = 'none';
         scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-        scanner.render(onScanSuccess);
+        scanner.render((text) => {
+            let p = text.split(',');
+            if(p.length === 4) {
+                document.getElementById('itemSelect').value = p[0].trim();
+                document.getElementById('qty').value = p[1].trim();
+                document.getElementById('personName').value = p[2].trim();
+                sendToFirebase(p[3].trim());
+            }
+        });
     }
     startScanner();
 
     function sendToFirebase(type) {
-        let item = document.getElementById('itemSelect').value;
-        let qty = parseInt(document.getElementById('qty').value) || 0;
-        let person = document.getElementById('personName').value || "سالم";
-        db.ref(`Inventory/${item}`).transaction((c) => (type === 'وارد' ? (c||0)+qty : (c||0)-qty));
-        db.ref("Logs").push({ item, qty, person, type, time: new Date().toLocaleTimeString('ar-SA') });
+        let i = document.getElementById('itemSelect').value;
+        let q = parseInt(document.getElementById('qty').value) || 0;
+        db.ref(`Inventory/${i}`).transaction(c => (type === 'وارد' ? (c||0)+q : (c||0)-q));
+        db.ref("Logs").push({ item: i, qty: q, person: document.getElementById('personName').value || "سالم", type, time: new Date().toLocaleTimeString('ar-SA') });
     }
 
     function clearAllData() {
