@@ -16,10 +16,10 @@
         .rescan-btn { display: none; margin-top: 10px; width: 100%; font-weight: bold; }
         .btn-clear { background-color: #dc3545; border: none; color: white; margin-top: 20px; font-size: 0.8rem; opacity: 0.6; }
         
-        /* تنسيق الزر الجديد */
+        /* زر الكتم المطور */
         #mute-btn { width: 100%; margin-top: 10px; font-weight: bold; padding: 12px; border-radius: 10px; border: none; font-size: 1.1rem; }
-        .btn-alarm-active { background-color: #dc3545; color: white; animation: pulse-red 1.5s infinite; }
-        .btn-alarm-muted { background-color: #10b981; color: white; }
+        .btn-alarm-active { background-color: #dc3545; color: white; animation: pulse-red 1.5s infinite; cursor: pointer; }
+        .btn-alarm-muted { background-color: #10b981; color: white; cursor: pointer; }
 
         @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
 
@@ -31,7 +31,7 @@
 </head>
 <body onclick="startAudioContext()">
 
-<div id="temp-alert" class="alert-box alert-danger blink">🚨 تحذير: خطر في المستودع! (حرارة أو دخان)</div>
+<div id="temp-alert" class="alert-box alert-danger blink">🚨 تحذير: تم تجاوز الحدود الآمنة في المستودع!</div>
 
 <div class="hero-section text-center">
     <h2>نظام إدارة مستودع الحاسب الآلي (صمام)</h2>
@@ -117,13 +117,11 @@
         gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
         alarmOsc.connect(gain); gain.connect(audioCtx.destination);
         alarmOsc.start();
-        // تأثير الصوت
         setInterval(() => { if(alarmOsc && !localMute) { alarmOsc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.4); alarmOsc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.8); } }, 800);
     }
 
     function stopAlarm() { if (alarmOsc) { alarmOsc.stop(); alarmOsc = null; } }
 
-    // التحكم بالزر
     function toggleMute() {
         localMute = !localMute;
         db.ref("System/MutedByAdmin").set(localMute);
@@ -133,20 +131,15 @@
 
     function updateMuteButton() {
         const btn = document.getElementById('mute-btn');
-        if (localMute) {
-            btn.innerText = "🔊 تشغيل الصوت";
-            btn.className = "btn-alarm-muted";
-        } else {
-            btn.innerText = "🔇 كتم الصوت";
-            btn.className = "btn-alarm-active";
-        }
+        if (localMute) { btn.innerText = "🔊 تشغيل الصوت"; btn.className = "btn-alarm-muted"; } 
+        else { btn.innerText = "🔇 كتم الصوت"; btn.className = "btn-alarm-active"; }
     }
 
     function checkAndPlay() {
         db.ref("System/AlarmTrigger").once('value', s => { if(s.val() === "ON" && !localMute) playAlarm(); });
     }
 
-    // قراءة الحساسات (تم إصلاح الدخان)
+    // مراقبة الحساسات (ضبط شرط الرطوبة 65)
     db.ref("WMS").on("value", (s) => {
         const data = s.val() || {};
         const t = parseFloat(data.Temperature) || 0;
@@ -158,17 +151,19 @@
         document.getElementById('smoke-val').innerText = smoke;
 
         let statusBox = document.getElementById('fire-status');
-        if(smoke < 400) { statusBox.innerText = "الجو صافي ✅"; statusBox.className = "fw-bold p-2 rounded bg-success text-white"; }
-        else { statusBox.innerText = "خطر حريق! 🔥"; statusBox.className = "fw-bold p-2 rounded bg-danger text-white blink"; }
-
-        if(t >= 30 || smoke >= 400) {
+        
+        // الشرط الآن يشمل الرطوبة >= 65
+        if(t >= 30 || smoke >= 400 || h >= 65) {
             db.ref("System/AlarmTrigger").set("ON");
             document.getElementById('temp-alert').style.display = 'block';
+            statusBox.innerText = h >= 65 ? "🚨 رطوبة عالية!" : "🚨 حالة طوارئ!";
+            statusBox.className = "fw-bold p-2 rounded bg-danger text-white blink";
         } else {
             db.ref("System/AlarmTrigger").set("OFF");
             document.getElementById('temp-alert').style.display = 'none';
-            // إذا رجع كل شيء طبيعي، نصفر الكتم عشان المرة الجاية
-            localMute = false;
+            statusBox.innerText = "الجو صافي ✅";
+            statusBox.className = "fw-bold p-2 rounded bg-success text-white";
+            localMute = false; 
             db.ref("System/MutedByAdmin").set(false);
             updateMuteButton();
         }
@@ -181,22 +176,21 @@
         if (trigger && !localMute) playAlarm(); else stopAlarm();
     });
 
-    // الوظائف الباقية (مخزون وسجل)
+    // باقي كود المخزون والسجل كما هو
     db.ref("Inventory").on("value", (s) => {
         const d = s.val() || {};
         ["شواحن", "طابعات", "أحبار", "حواسب", "فارات"].forEach(i => { document.getElementById(`count-${i}`).innerText = d[i] || 0; });
     });
 
     db.ref("Logs").limitToLast(10).on("value", (s) => {
-        const d = s.val(); let h = "";
-        if(d) Object.values(d).reverse().forEach(l => { h += `<tr><td><span class="badge ${l.type === 'وارد' ? 'bg-success' : 'bg-danger'}">${l.type}</span></td><td>${l.item}</td><td>${l.qty}</td><td>${l.person}</td><td>${l.time}</td></tr>`; });
-        document.getElementById('logs').innerHTML = h;
+        const d = s.val(); let html = "";
+        if(d) Object.values(d).reverse().forEach(l => { html += `<tr><td><span class="badge ${l.type === 'وارد' ? 'bg-success' : 'bg-danger'}">${l.type}</span></td><td>${l.item}</td><td>${l.qty}</td><td>${l.person}</td><td>${l.time}</td></tr>`; });
+        document.getElementById('logs').innerHTML = html;
     });
 
-    let scanner;
     function startScanner() {
         document.getElementById('rescanButton').style.display = 'none';
-        scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        let scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
         scanner.render((text) => {
             let p = text.split(',');
             if(p.length === 4) {
