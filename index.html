@@ -102,22 +102,22 @@
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); 
     }
 
-    // صوت السوبر ماركت المطور
+    // الصوت المطابق للمقطع (Barcode Scanner ASMR)
     function playBeep() {
         try {
             let ctx = new (window.AudioContext || window.webkitAudioContext)();
             let o = ctx.createOscillator();
             let g = ctx.createGain();
             o.type = "sine"; 
-            o.frequency.setValueAtTime(1000, ctx.currentTime); // تردد عالي وحاد
-            g.gain.setValueAtTime(0.2, ctx.currentTime);
-            g.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.08); // تلاشي سريع جداً للبييب
+            o.frequency.setValueAtTime(1200, ctx.currentTime); // تردد حاد مثل أجهزة Zebra
+            g.gain.setValueAtTime(0.3, ctx.currentTime);
+            g.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.05); // زمن استجابة سريع جداً (50ms)
             o.connect(g); g.connect(ctx.destination);
-            o.start(); o.stop(ctx.currentTime + 0.08);
+            o.start(); o.stop(ctx.currentTime + 0.05);
         } catch(e) {}
     }
 
-    // مراقبة المسح من كل الأجهزة
+    // مزامنة الصوت بين الأجهزة عبر الفايربيس
     db.ref("System/LastScanTime").on("value", (snapshot) => {
         if (snapshot.exists()) { playBeep(); }
     });
@@ -177,48 +177,3 @@
         document.getElementById('mute-btn').style.display = trigger ? 'block' : 'none';
         if (trigger && !localMute) playAlarm(); else stopAlarm();
     });
-
-    db.ref("Inventory").on("value", (s) => {
-        const d = s.val() || {};
-        ["شواحن", "طابعات", "أحبار", "حواسب", "فارات"].forEach(i => { document.getElementById(`count-${i}`).innerText = d[i] || 0; });
-    });
-
-    db.ref("Logs").limitToLast(10).on("value", (s) => {
-        const d = s.val(); let html = "";
-        if(d) Object.values(d).reverse().forEach(l => { html += `<tr><td><span class="badge ${l.type === 'وارد' ? 'bg-success' : 'bg-danger'}">${l.type}</span></td><td>${l.item}</td><td>${l.qty}</td><td>${l.person}</td><td>${l.time}</td></tr>`; });
-        document.getElementById('logs').innerHTML = html;
-    });
-
-    function startScanner() {
-        isScanning = true;
-        document.getElementById('rescanButton').style.display = 'none';
-        if (scannerObj) { scannerObj.clear(); }
-        scannerObj = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-        scannerObj.render((text) => {
-            if (isScanning) {
-                isScanning = false;
-                db.ref("System/LastScanTime").set(firebase.database.ServerValue.TIMESTAMP);
-                let p = text.split(',');
-                if(p.length === 4) {
-                    document.getElementById('itemSelect').value = p[0].trim();
-                    document.getElementById('qty').value = p[1].trim();
-                    document.getElementById('personName').value = p[2].trim();
-                    sendToFirebase(p[3].trim());
-                    scannerObj.clear().then(() => { document.getElementById('rescanButton').style.display = 'block'; });
-                } else { alert("خطأ!"); isScanning = true; }
-            }
-        });
-    }
-
-    window.onload = () => { startScanner(); };
-
-    function sendToFirebase(type) {
-        let i = document.getElementById('itemSelect').value, q = parseInt(document.getElementById('qty').value) || 0;
-        db.ref(`Inventory/${i}`).transaction(c => (type === 'وارد' ? (c||0)+q : (c||0)-q));
-        db.ref("Logs").push({ item: i, qty: q, person: document.getElementById('personName').value || "سالم", type, time: new Date().toLocaleTimeString('ar-SA') });
-    }
-
-    function clearAllData() { if(confirm("تصفير؟")) { db.ref("Inventory").remove(); db.ref("Logs").remove().then(() => location.reload()); } }
-</script>
-</body>
-</html>
