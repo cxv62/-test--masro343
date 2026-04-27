@@ -15,8 +15,8 @@
         #reader { width: 100%; border-radius: 10px; overflow: hidden; background: #000; border: 2px solid #38bdf8; min-height: 250px; }
         .rescan-btn { display: none; margin-top: 10px; width: 100%; font-weight: bold; }
         .btn-clear { background-color: #dc3545; border: none; color: white; margin-top: 20px; font-size: 0.8rem; opacity: 0.6; }
+        .btn-mute { background-color: #f59e0b; border: none; color: black; margin-top: 10px; font-size: 0.9rem; font-weight: bold; display: none; width: 100%; padding: 10px; border-radius: 10px; }
         
-        /* تنبيهات النظام المخصصة */
         .alert-box {
             display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
             z-index: 9999; width: 90%; max-width: 450px; padding: 15px;
@@ -25,15 +25,15 @@
         }
         .alert-danger { background-color: #dc3545; }
         .alert-warning { background-color: #f59e0b; color: #000; }
-
-        .blink { animation: blinker 1s linear infinite; color: #ff4444 !important; }
+        .blink { animation: blinker 1s linear infinite; }
         @keyframes blinker { 50% { opacity: 0; } }
     </style>
 </head>
-<body>
+<body onclick="enableAudio()"> <audio id="scan-sound" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3" preload="auto"></audio>
+<audio id="alarm-sound" src="https://assets.mixkit.co/active_storage/sfx/951/951-preview.mp3" preload="auto" loop></audio>
 
 <div id="stock-alert" class="alert-box alert-danger">الصنف المطلوب غير متوفر في المخزن.</div>
-<div id="temp-alert" class="alert-box alert-danger">⚠️ تنبيه: درجة الحرارة في المستودع مرتفعة جداً!</div>
+<div id="temp-alert" class="alert-box alert-danger blink">⚠️ تنبيه: حالة طوارئ بيئية في المستودع!</div>
 <div id="hum-alert" class="alert-box alert-warning">⚠️ تنبيه: مستوى الرطوبة عالٍ في المستودع!</div>
 
 <div class="hero-section text-center">
@@ -62,6 +62,8 @@
                 <hr>
                 <div class="mb-2"><small>نسبة الدخان</small><div id="smoke-val" class="fw-bold" style="font-size: 1.5rem;">--</div></div>
                 <div id="fire-status" class="fw-bold p-2 rounded">بانتظار البيانات...</div>
+                
+                <button id="mute-btn" onclick="muteSystem()" class="btn btn-mute">🔇 إيقاف صوت الإنذار</button>
                 <button onclick="clearAllData()" class="btn btn-clear">🧹 تصفير السجل والمخزون</button>
             </div>
         </div>
@@ -126,6 +128,20 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
+    let audioEnabled = false;
+    const alarmAudio = document.getElementById('alarm-sound');
+    const scanAudio = document.getElementById('scan-sound');
+
+    // وظيفة لتفعيل الصوت بمجرد ضغط المستخدم
+    function enableAudio() {
+        if (!audioEnabled) {
+            audioEnabled = true;
+            // تشغيل صامت سريع لتفعيل قناة الصوت في المتصفح
+            alarmAudio.play().then(() => { alarmAudio.pause(); }).catch(e => console.log("Audio waiting..."));
+            console.log("Audio Enabled ✅");
+        }
+    }
+
     let currentStock = {};
 
     db.ref("Inventory").on("value", (snapshot) => {
@@ -147,28 +163,49 @@
             document.getElementById('hum').innerText = h;
             document.getElementById('smoke-val').innerText = smoke;
 
-            // مراقبة الحرارة (30 درجة)
-            if(t >= 30) {
-                document.getElementById('temp-alert').style.display = 'block';
-                document.getElementById('temp').classList.add('blink');
-            } else {
-                document.getElementById('temp-alert').style.display = 'none';
-                document.getElementById('temp').classList.remove('blink');
-            }
+            let isDanger = (t >= 30 || h >= 65 || smoke >= 2000);
 
-            // مراقبة الرطوبة (65%)
-            if(h >= 65) {
-                document.getElementById('hum-alert').style.display = 'block';
+            if(isDanger) {
+                db.ref("System/AlarmTrigger").set("ON");
+                if(t >= 30) document.getElementById('temp-alert').style.display = 'block';
+                if(h >= 65) document.getElementById('hum-alert').style.display = 'block';
             } else {
+                db.ref("System/AlarmTrigger").set("OFF");
+                db.ref("System/MutedByAdmin").set(false);
+                document.getElementById('temp-alert').style.display = 'none';
                 document.getElementById('hum-alert').style.display = 'none';
             }
 
-            // مراقبة الدخان
             let statusBox = document.getElementById('fire-status');
-            if(smoke < 500) { statusBox.innerText = "الجو صافي ✅"; statusBox.className = "fw-bold p-2 rounded bg-success text-white"; }
-            else { statusBox.innerText = "خطر حريق! 🔥"; statusBox.className = "fw-bold p-2 rounded bg-danger text-white blink"; }
+            if(smoke < 500) { 
+                statusBox.innerText = "الجو صافي ✅"; 
+                statusBox.className = "fw-bold p-2 rounded bg-success text-white"; 
+            } else { 
+                statusBox.innerText = "خطر حريق! 🔥"; 
+                statusBox.className = "fw-bold p-2 rounded bg-danger text-white blink"; 
+            }
         }
     });
+
+    // المزامنة المركزية للصوت
+    db.ref("System").on("value", (snapshot) => {
+        const sys = snapshot.val() || {};
+        const trigger = sys.AlarmTrigger === "ON";
+        const muted = sys.MutedByAdmin || false;
+
+        if (trigger && !muted && audioEnabled) {
+            alarmAudio.play();
+            document.getElementById('mute-btn').style.display = 'block';
+        } else {
+            alarmAudio.pause();
+            alarmAudio.currentTime = 0;
+            if (!trigger) document.getElementById('mute-btn').style.display = 'none';
+        }
+    });
+
+    function muteSystem() {
+        db.ref("System/MutedByAdmin").set(true);
+    }
 
     db.ref("Logs").limitToLast(10).on("value", (snapshot) => {
         const data = snapshot.val();
@@ -181,24 +218,12 @@
         document.getElementById('logs').innerHTML = html;
     });
 
-    function showStockAlert() {
-        const alertBox = document.getElementById('stock-alert');
-        alertBox.style.display = 'block';
-        setTimeout(() => { alertBox.style.display = 'none'; }, 4000);
-    }
-
     let scanner;
     function onScanSuccess(decodedText) {
+        if(audioEnabled) scanAudio.play(); // صوت "بييب"
         let parts = decodedText.split(',');
         if(parts.length === 4) {
             let [item, amount, source, action] = parts.map(p => p.trim());
-            let qty = parseInt(amount) || 0;
-            let stockNow = currentStock[item] || 0;
-
-            if (action === 'منصرف' && qty > stockNow) {
-                showStockAlert();
-                return;
-            }
             scanner.clear();
             document.getElementById('rescanButton').style.display = 'block';
             document.getElementById('itemSelect').value = item;
@@ -222,14 +247,13 @@
         let stockNow = currentStock[item] || 0;
 
         if (type === 'منصرف' && qty > stockNow) {
-            showStockAlert();
+            const alertBox = document.getElementById('stock-alert');
+            alertBox.style.display = 'block';
+            setTimeout(() => { alertBox.style.display = 'none'; }, 4000);
             return;
         }
 
-        db.ref(`Inventory/${item}`).transaction((current) => {
-            let newCount = type === 'وارد' ? (current || 0) + qty : (current || 0) - qty;
-            return newCount < 0 ? current : newCount;
-        });
+        db.ref(`Inventory/${item}`).transaction((current) => (type === 'وارد' ? (current || 0) + qty : (current || 0) - qty));
         db.ref("Logs").push({ item, qty, person, type, time: new Date().toLocaleTimeString('ar-SA') });
     }
 
