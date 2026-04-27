@@ -41,11 +41,11 @@
         <div class="col-md-3">
             <div class="card card-custom p-3 text-center h-100">
                 <h5 class="mb-3 border-bottom pb-2 text-info">الرقابة البيئية 📡</h5>
-                <div class="mb-3"><small>الحرارة</small><div class="sensor-val"><span id="temp">0.0</span>°C</div></div>
-                <div class="mb-3"><small>الرطوبة</small><div class="sensor-val" style="color: #10b981;"><span id="hum">0.0</span>%</div></div>
+                <div class="mb-3"><small>الحرارة</small><div class="sensor-val"><span id="temp">--</span>°C</div></div>
+                <div class="mb-3"><small>الرطوبة</small><div class="sensor-val" style="color: #10b981;"><span id="hum">--</span>%</div></div>
                 <hr>
-                <div class="mb-2"><small>نسبة الدخان</small><div id="smoke-val" class="fw-bold" style="font-size: 1.5rem;">0</div></div>
-                <div id="fire-status" class="fw-bold p-2 rounded bg-success text-white">الجو صافي ✅</div>
+                <div class="mb-2"><small>نسبة الدخان</small><div id="smoke-val" class="fw-bold" style="font-size: 1.5rem;">--</div></div>
+                <div id="fire-status" class="fw-bold p-2 rounded">جارِ الاتصال...</div>
                 <button id="mute-btn" onclick="toggleMute()" class="btn-alarm-active" style="display: none;">🔇 كتم الصوت</button>
                 <button onclick="clearAllData()" class="btn btn-clear">🧹 تصفير السجل</button>
             </div>
@@ -91,89 +91,106 @@
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 <script>
-    const firebaseConfig = { databaseURL: "https://mashro3-be2b3-default-rtdb.firebaseio.com/" };
+    // تم تعديل الرابط بناءً على الصورة المرسلة لضمان الاتصال الصحيح
+    const firebaseConfig = { databaseURL: "https://mashro3-be2b3-default-rtdb.firebaseio.com" };
     if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
     const db = firebase.database();
 
     let audioCtx = null, alarmOsc = null, localMute = false;
     let scannerObj = null, isScanning = true;
 
-    function startAudioContext() { 
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); 
-    }
+    function startAudioContext() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
 
-    // الصوت المطابق للمقطع (Barcode Scanner ASMR)
     function playBeep() {
         try {
             let ctx = new (window.AudioContext || window.webkitAudioContext)();
-            let o = ctx.createOscillator();
-            let g = ctx.createGain();
-            o.type = "sine"; 
-            o.frequency.setValueAtTime(1200, ctx.currentTime); // تردد حاد مثل أجهزة Zebra
+            let o = ctx.createOscillator(); let g = ctx.createGain();
+            o.type = "sine"; o.frequency.setValueAtTime(1200, ctx.currentTime);
             g.gain.setValueAtTime(0.3, ctx.currentTime);
-            g.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.05); // زمن استجابة سريع جداً (50ms)
+            g.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.05);
             o.connect(g); g.connect(ctx.destination);
             o.start(); o.stop(ctx.currentTime + 0.05);
         } catch(e) {}
     }
 
-    // مزامنة الصوت بين الأجهزة عبر الفايربيس
-    db.ref("System/LastScanTime").on("value", (snapshot) => {
-        if (snapshot.exists()) { playBeep(); }
-    });
+    // الربط المباشر مع الحساسات كما في الصورة
+    db.ref("WMS").on("value", (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            const t = data.Temperature || 0;
+            const h = data.Humidity || 0;
+            const s = data.Smoke || 0;
 
-    function playAlarm() {
-        if (!audioCtx || alarmOsc || localMute) return;
-        alarmOsc = audioCtx.createOscillator();
-        let gain = audioCtx.createGain();
-        alarmOsc.type = 'sawtooth';
-        alarmOsc.frequency.setValueAtTime(440, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-        alarmOsc.connect(gain); gain.connect(audioCtx.destination);
-        alarmOsc.start();
-        setInterval(() => { if(alarmOsc && !localMute) { alarmOsc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.4); alarmOsc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.8); } }, 800);
-    }
+            document.getElementById('temp').innerText = t;
+            document.getElementById('hum').innerText = h;
+            document.getElementById('smoke-val').innerText = s;
 
-    function stopAlarm() { if (alarmOsc) { alarmOsc.stop(); alarmOsc = null; } }
+            const statusBox = document.getElementById('fire-status');
+            const alertBox = document.getElementById('temp-alert');
 
-    function toggleMute() {
-        localMute = !localMute;
-        db.ref("System/MutedByAdmin").set(localMute);
-        updateMuteButton();
-        if (localMute) stopAlarm(); else checkAndPlay();
-    }
-
-    function updateMuteButton() {
-        const btn = document.getElementById('mute-btn');
-        btn.innerText = localMute ? "🔊 تشغيل الصوت" : "🔇 كتم الصوت";
-        btn.className = localMute ? "btn-alarm-muted" : "btn-alarm-active";
-    }
-
-    function checkAndPlay() { db.ref("System/AlarmTrigger").once('value', s => { if(s.val() === "ON" && !localMute) playAlarm(); }); }
-
-    db.ref("WMS").on("value", (s) => {
-        const d = s.val() || {};
-        const t = parseFloat(d.Temperature) || 0, h = parseFloat(d.Humidity) || 0, sm = d.Smoke || 0;
-        document.getElementById('temp').innerText = t.toFixed(1);
-        document.getElementById('hum').innerText = h.toFixed(1);
-        document.getElementById('smoke-val').innerText = sm;
-        const statusBox = document.getElementById('fire-status'), alertBox = document.getElementById('temp-alert');
-        if(t >= 30 || sm >= 400 || h >= 65) {
-            db.ref("System/AlarmTrigger").set("ON");
-            alertBox.style.display = 'block';
-            statusBox.innerText = h >= 65 ? "🚨 رطوبة عالية!" : "🚨 حالة طوارئ!";
-            statusBox.className = "fw-bold p-2 rounded bg-danger text-white blink";
-        } else {
-            db.ref("System/AlarmTrigger").set("OFF");
-            alertBox.style.display = 'none';
-            statusBox.innerText = "الجو صافي ✅";
-            statusBox.className = "fw-bold p-2 rounded bg-success text-white";
+            // منطق التنبيه
+            if(t >= 30 || s >= 400 || h >= 65) {
+                db.ref("System/AlarmTrigger").set("ON");
+                alertBox.style.display = 'block';
+                statusBox.innerText = "🚨 خطر! تفقد المستودع";
+                statusBox.className = "fw-bold p-2 rounded bg-danger text-white blink";
+            } else {
+                db.ref("System/AlarmTrigger").set("OFF");
+                alertBox.style.display = 'none';
+                statusBox.innerText = "الجو صافي ✅";
+                statusBox.className = "fw-bold p-2 rounded bg-success text-white";
+            }
         }
+    }, (error) => {
+        document.getElementById('fire-status').innerText = "خطأ في الاتصال!";
+        console.error(error);
     });
 
-    db.ref("System").on("value", (s) => {
-        const sys = s.val() || {};
-        const trigger = sys.AlarmTrigger === "ON";
-        document.getElementById('mute-btn').style.display = trigger ? 'block' : 'none';
-        if (trigger && !localMute) playAlarm(); else stopAlarm();
+    // مزامنة الصوت
+    db.ref("System/LastScanTime").on("value", (s) => { if (s.exists()) playBeep(); });
+
+    // بقية وظائف النظام
+    db.ref("Inventory").on("value", (s) => {
+        const d = s.val() || {};
+        ["شواحن", "طابعات", "أحبار", "حواسب", "فارات"].forEach(i => { document.getElementById(`count-${i}`).innerText = d[i] || 0; });
     });
+
+    db.ref("Logs").limitToLast(10).on("value", (s) => {
+        const d = s.val(); let html = "";
+        if(d) Object.values(d).reverse().forEach(l => { html += `<tr><td><span class="badge ${l.type === 'وارد' ? 'bg-success' : 'bg-danger'}">${l.type}</span></td><td>${l.item}</td><td>${l.qty}</td><td>${l.person}</td><td>${l.time}</td></tr>`; });
+        document.getElementById('logs').innerHTML = html;
+    });
+
+    function startScanner() {
+        isScanning = true;
+        document.getElementById('rescanButton').style.display = 'none';
+        if (scannerObj) { scannerObj.clear(); }
+        scannerObj = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        scannerObj.render((text) => {
+            if (isScanning) {
+                isScanning = false;
+                db.ref("System/LastScanTime").set(firebase.database.ServerValue.TIMESTAMP);
+                let p = text.split(',');
+                if(p.length === 4) {
+                    document.getElementById('itemSelect').value = p[0].trim();
+                    document.getElementById('qty').value = p[1].trim();
+                    document.getElementById('personName').value = p[2].trim();
+                    sendToFirebase(p[3].trim());
+                    scannerObj.clear().then(() => { document.getElementById('rescanButton').style.display = 'block'; });
+                } else { alert("خطأ في البيانات!"); isScanning = true; }
+            }
+        });
+    }
+
+    window.onload = startScanner;
+
+    function sendToFirebase(type) {
+        let i = document.getElementById('itemSelect').value, q = parseInt(document.getElementById('qty').value) || 0;
+        db.ref(`Inventory/${i}`).transaction(c => (type === 'وارد' ? (c||0)+q : (c||0)-q));
+        db.ref("Logs").push({ item: i, qty: q, person: document.getElementById('personName').value || "سالم", type, time: new Date().toLocaleTimeString('ar-SA') });
+    }
+
+    function clearAllData() { if(confirm("حذف السجل؟")) { db.ref("Inventory").remove(); db.ref("Logs").remove().then(() => location.reload()); } }
+</script>
+</body>
+</html>
