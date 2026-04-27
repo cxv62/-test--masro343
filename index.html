@@ -91,7 +91,6 @@
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 <script>
-    // تم تعديل الرابط بحذف السلاش الأخير لضمان الاتصال الصحيح
     const firebaseConfig = { databaseURL: "https://mashro3-be2b3-default-rtdb.firebaseio.com" };
     if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
     const db = firebase.database();
@@ -103,6 +102,7 @@
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); 
     }
 
+    // صوت البيب المطابق للمقطع بالملي (إلكتروني حاد)
     function playBeep() {
         try {
             let ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -150,23 +150,17 @@
 
     function checkAndPlay() { db.ref("System/AlarmTrigger").once('value', s => { if(s.val() === "ON" && !localMute) playAlarm(); }); }
 
-    // تعديل القراءات لضمان سحب البيانات من WMS مباشرة
     db.ref("WMS").on("value", (s) => {
         const d = s.val() || {};
-        // سحب القيم بناءً على الأسماء الموجودة في قاعدة بياناتك (أحرف كبيرة)
-        const t = d.Temperature || 0;
-        const h = d.Humidity || 0;
-        const sm = d.Smoke || 0;
-
+        const t = d.Temperature || 0, h = d.Humidity || 0, sm = d.Smoke || 0;
         document.getElementById('temp').innerText = t;
         document.getElementById('hum').innerText = h;
         document.getElementById('smoke-val').innerText = sm;
-
         const statusBox = document.getElementById('fire-status'), alertBox = document.getElementById('temp-alert');
         if(t >= 30 || sm >= 400 || h >= 65) {
             db.ref("System/AlarmTrigger").set("ON");
             alertBox.style.display = 'block';
-            statusBox.innerText = h >= 65 ? "🚨 رطوبة عالية!" : "🚨 حالة طوارئ!";
+            statusBox.innerText = sm >= 400 ? "🚨 دخان كثيف!" : "🚨 حالة طوارئ!";
             statusBox.className = "fw-bold p-2 rounded bg-danger text-white blink";
         } else {
             db.ref("System/AlarmTrigger").set("OFF");
