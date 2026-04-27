@@ -98,8 +98,11 @@
     let audioCtx = null, alarmOsc = null, localMute = false;
     let scannerObj = null, isScanning = true;
 
-    function startAudioContext() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    function startAudioContext() { 
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); 
+    }
 
+    // دالة البييب الموحدة
     function playBeep() {
         try {
             let ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -110,6 +113,13 @@
             o.start(); o.stop(ctx.currentTime + 0.1);
         } catch(e) {}
     }
+
+    // مراقبة المسح من أجهزة أخرى (لسماع الصوت في كل مكان)
+    db.ref("System/LastScanTime").on("value", (snapshot) => {
+        if (snapshot.exists()) {
+            playBeep(); // تشغيل الصوت عند حدوث أي عملية مسح
+        }
+    });
 
     function playAlarm() {
         if (!audioCtx || alarmOsc || localMute) return;
@@ -140,20 +150,13 @@
 
     function checkAndPlay() { db.ref("System/AlarmTrigger").once('value', s => { if(s.val() === "ON" && !localMute) playAlarm(); }); }
 
-    // قراءة الحساسات - تم التأكد من الربط
     db.ref("WMS").on("value", (s) => {
         const d = s.val() || {};
-        const t = parseFloat(d.Temperature) || 0;
-        const h = parseFloat(d.Humidity) || 0;
-        const sm = d.Smoke || 0;
-
+        const t = parseFloat(d.Temperature) || 0, h = parseFloat(d.Humidity) || 0, sm = d.Smoke || 0;
         document.getElementById('temp').innerText = t.toFixed(1);
         document.getElementById('hum').innerText = h.toFixed(1);
         document.getElementById('smoke-val').innerText = sm;
-
-        const statusBox = document.getElementById('fire-status');
-        const alertBox = document.getElementById('temp-alert');
-        
+        const statusBox = document.getElementById('fire-status'), alertBox = document.getElementById('temp-alert');
         if(t >= 30 || sm >= 400 || h >= 65) {
             db.ref("System/AlarmTrigger").set("ON");
             alertBox.style.display = 'block';
@@ -176,16 +179,12 @@
 
     db.ref("Inventory").on("value", (s) => {
         const d = s.val() || {};
-        ["شواحن", "طابعات", "أحبار", "حواسب", "فارات"].forEach(i => { 
-            document.getElementById(`count-${i}`).innerText = d[i] || 0; 
-        });
+        ["شواحن", "طابعات", "أحبار", "حواسب", "فارات"].forEach(i => { document.getElementById(`count-${i}`).innerText = d[i] || 0; });
     });
 
     db.ref("Logs").limitToLast(10).on("value", (s) => {
         const d = s.val(); let html = "";
-        if(d) Object.values(d).reverse().forEach(l => { 
-            html += `<tr><td><span class="badge ${l.type === 'وارد' ? 'bg-success' : 'bg-danger'}">${l.type}</span></td><td>${l.item}</td><td>${l.qty}</td><td>${l.person}</td><td>${l.time}</td></tr>`; 
-        });
+        if(d) Object.values(d).reverse().forEach(l => { html += `<tr><td><span class="badge ${l.type === 'وارد' ? 'bg-success' : 'bg-danger'}">${l.type}</span></td><td>${l.item}</td><td>${l.qty}</td><td>${l.person}</td><td>${l.time}</td></tr>`; });
         document.getElementById('logs').innerHTML = html;
     });
 
@@ -197,7 +196,9 @@
         scannerObj.render((text) => {
             if (isScanning) {
                 isScanning = false;
-                playBeep();
+                // إرسال إشارة للفايربيس لتشغيل الصوت في كل الأجهزة
+                db.ref("System/LastScanTime").set(firebase.database.ServerValue.TIMESTAMP);
+                
                 let p = text.split(',');
                 if(p.length === 4) {
                     document.getElementById('itemSelect').value = p[0].trim();
@@ -218,7 +219,7 @@
         db.ref("Logs").push({ item: i, qty: q, person: document.getElementById('personName').value || "سالم", type, time: new Date().toLocaleTimeString('ar-SA') });
     }
 
-    function clearAllData() { if(confirm("تصفير السجل والمخزون؟")) { db.ref("Inventory").remove(); db.ref("Logs").remove().then(() => location.reload()); } }
+    function clearAllData() { if(confirm("تصفير؟")) { db.ref("Inventory").remove(); db.ref("Logs").remove().then(() => location.reload()); } }
 </script>
 </body>
 </html>
