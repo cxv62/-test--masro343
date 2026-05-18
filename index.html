@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>نظام إدارة مستودع الحاسب الآلي - صمام</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body { background-color: #0b0f19; color: #f8fafc; font-family: 'Segoe UI', Tahoma; }
+        .hero-section { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 25px; border-bottom: 3px solid #38bdf8; margin-bottom: 20px; }
+        .card-custom { background: #1e293b; border: none; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .sensor-val { font-size: 2rem; font-weight: bold; color: #38bdf8; }
+        .stock-badge { background: #0f172a; border: 1px solid #38bdf8; border-radius: 10px; padding: 10px; text-align: center; }
+        .stock-num { display: block; font-size: 1.5rem; font-weight: bold; color: #38bdf8; }
+        #reader { width: 100%; border-radius: 10px; overflow: hidden; background: #000; border: 2px solid #38bdf8; min-height: 250px; }
+        .rescan-btn { display: none; margin: 15px auto; width: 80%; font-weight: bold; }
+        .btn-clear { background-color: #dc3545; border: none; color: white; margin-top: 20px; font-size: 0.8rem; opacity: 0.6; }
+        #mute-btn { width: 100%; margin-top: 10px; font-weight: bold; padding: 12px; border-radius: 10px; border: none; font-size: 1.1rem; }
+        .btn-alarm-active { background-color: #dc3545; color: white; animation: pulse-red 1.5s infinite; cursor: pointer; }
+        .btn-alarm-muted { background-color: #10b981; color: white; cursor: pointer; }
+        @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+        .alert-box { display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 450px; padding: 15px; color: white; text-align: center; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); font-weight: bold; background-color: #dc3545; }
+        .blink { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+
+        /* ===== تنبيه نقص المخزون ===== */
+        #stock-alert-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 999999;
+            align-items: center;
+            justify-content: center;
+            -webkit-overflow-scrolling: touch;
+        }
+        #stock-alert-overlay.show { display: -webkit-flex; display: flex; }
+        #stock-alert-box {
+            background: #1e293b;
+            border: 2px solid #f97316;
+            border-radius: 18px;
+            padding: 25px 20px;
+            max-width: 420px;
+            width: 88%;
+            text-align: center;
+            box-shadow: 0 0 40px rgba(249,115,22,0.5);
+            animation: pop-in 0.25s ease;
+            position: relative;
+            z-index: 1000000;
+            margin: auto;
+        }
+        @keyframes pop-in { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        #stock-alert-box .alert-icon { font-size: 3rem; margin-bottom: 10px; }
+        #stock-alert-box h4 { color: #f97316; font-weight: bold; margin-bottom: 8px; }
+        #stock-alert-box .alert-detail { background: #0f172a; border-radius: 10px; padding: 12px; margin: 15px 0; font-size: 1rem; line-height: 1.8; }
+        #stock-alert-box .alert-detail span { color: #38bdf8; font-weight: bold; }
+        #stock-alert-box button { background: #f97316; border: none; color: white; padding: 10px 30px; border-radius: 10px; font-weight: bold; font-size: 1rem; cursor: pointer; margin-top: 5px; }
+        #stock-alert-box button:hover { background: #ea6c0a; }
+
+        /* لون عداد المخزون حسب الكمية */
+        .stock-low { color: #f97316 !important; }
+        .stock-empty { color: #ef4444 !important; }
+    </style>
+</head>
+<body onclick="startAudioContext()">
+
+<!-- تنبيه الحرارة / الدخان -->
+<div id="temp-alert" class="alert-box blink">🚨 <span id="alert-msg">تنبيه: تجاوز الحدود الآمنة!</span></div>
+
+<!-- ===== نافذة تنبيه نقص المخزون ===== -->
+<div id="stock-alert-overlay">
+    <div id="stock-alert-box">
+        <div class="alert-icon">⚠️</div>
+        <h4>الكمية غير كافية في المخزون</h4>
+        <div class="alert-detail" id="stock-alert-detail">
+            <!-- تُملأ ديناميكياً -->
+        </div>
+        <button onclick="closeStockAlert()">حسناً، فهمت</button>
+    </div>
+</div>
+
+<div class="hero-section text-center">
+    <h2>نظام إدارة مستودع الحاسب الآلي (صمام)</h2>
+    <div class="names-list mx-auto mt-2" style="max-width: 950px; font-size: 0.85rem; border: 1px solid #38bdf8; padding: 10px; border-radius: 10px;">
+        <strong>فريق العمل:</strong> سالم رفق العنزي | خالد محمد | عبد الله سعد | طلال شاكر | محمد ماين | أحمد علاوي | البراء | صالح سلمان | سطام سليمان | نواف منيف | عبد المجيد عيد | عبد الرحمن فارس | رعد العويضه
+    </div>
+</div>
+
+<div class="container">
+    <div class="row g-4">
+        <div class="col-md-3">
+            <div class="card card-custom p-3 text-center h-100">
+                <h5 class="mb-3 border-bottom pb-2 text-info">الرقابة البيئية 📡</h5>
+                <div class="mb-3"><small>الحرارة</small><div class="sensor-val"><span id="temp">0.0</span>°C</div></div>
+                <div class="mb-3"><small>الرطوبة</small><div class="sensor-val" style="color: #10b981;"><span id="hum">0.0</span>%</div></div>
+                <hr>
+                <div class="mb-2"><small>نسبة الدخان</small><div id="smoke-val" class="fw-bold" style="font-size: 1.5rem;">0</div></div>
+                <div id="fire-status" class="fw-bold p-2 rounded bg-success text-white">وضع الدخان آمن ✅</div>
+                <button id="mute-btn" onclick="toggleMute()" class="btn-alarm-active" style="display: none;">🔇 كتم الصوت</button>
+                <button onclick="clearAllData()" class="btn btn-clear">🧹 تصفير السجل</button>
+            </div>
+        </div>
+
+        <div class="col-md-9">
+            <div class="row g-3 mb-4 text-center">
+                <div class="col-md col-6"><div class="stock-badge"><small>شواحن</small><span id="count-شواحن" class="stock-num">0</span></div></div>
+                <div class="col-md col-6"><div class="stock-badge"><small>طابعات</small><span id="count-طابعات" class="stock-num">0</span></div></div>
+                <div class="col-md col-6"><div class="stock-badge"><small>أحبار</small><span id="count-أحبار" class="stock-num">0</span></div></div>
+                <div class="col-md col-6"><div class="stock-badge"><small>حواسب</small><span id="count-حواسب" class="stock-num">0</span></div></div>
+                <div class="col-md col-12"><div class="stock-badge" style="border-color: #fbbf24;"><small>فارات/سماعات</small><span id="count-فارات" class="stock-num">0</span></div></div>
+            </div>
+
+            <div class="card card-custom p-4">
+                <div class="row">
+                    <div class="col-md-5 text-center">
+                        <div id="reader"></div>
+                        <button id="rescanButton" onclick="startScanner()" class="btn btn-primary rescan-btn">مسح جديد 🔄</button>
+                    </div>
+                    <div class="col-md-7 border-start border-secondary">
+                        <div class="row g-3">
+                            <div class="col-md-8"><select id="itemSelect" class="form-select bg-dark text-white border-secondary"><option value="شواحن">شواحن لابتوب</option><option value="طابعات">طابعات ليزر</option><option value="أحبار">أحبار طابعات</option><option value="حواسب">أجهزة حاسب (PC)</option><option value="فارات">فارات وسماعات</option></select></div>
+                            <div class="col-md-4"><input type="number" id="qty" class="form-control bg-dark text-white" value="1" min="1"></div>
+                            <div class="col-12"><input type="text" id="personName" class="form-control bg-dark text-white" placeholder="المستلم"></div>
+                            <div class="col-12 d-flex gap-2">
+                                <button onclick="sendToFirebase('وارد')" class="btn btn-success flex-fill">وارد</button>
+                                <button onclick="sendToFirebase('منصرف')" class="btn btn-danger flex-fill">منصرف</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 mt-3">
+            <div class="card card-custom p-4 text-center">
+                <h5 class="mb-3 text-start">سجل المخزون 📝</h5>
+                <div class="table-responsive"><table class="table table-dark table-striped"><thead><tr><th>العملية</th><th>الصنف</th><th>الكمية</th><th>الجهة</th><th>الوقت</th></tr></thead><tbody id="logs"></tbody></table></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+<script>
+    const firebaseConfig = { databaseURL: "https://mashro3-be2b3-default-rtdb.firebaseio.com" };
+    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+    const db = firebase.database();
+
+    let audioCtx = null, alarmOsc = null, localMute = false;
+    let scannerObj = null, isScanning = true;
+
+    // كاش محلي للمخزون الحالي
+    let currentInventory = {};
+
+    // أسماء الأصناف بالعربي للتنبيهات
+    const itemNames = {
+        'شواحن': 'شواحن لابتوب',
+        'طابعات': 'طابعات ليزر',
+        'أحبار': 'أحبار طابعات',
+        'حواسب': 'أجهزة حاسب (PC)',
+        'فارات': 'فارات وسماعات'
+    };
+
+    function startAudioContext() { 
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); 
+    }
+
+    function playBeep() {
+        try {
+            let ctx = new (window.AudioContext || window.webkitAudioContext)();
+            let o = ctx.createOscillator();
+            let g = ctx.createGain();
+            o.type = "square"; 
+            o.frequency.setValueAtTime(1500, ctx.currentTime); 
+            g.gain.setValueAtTime(0.1, ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.05); 
+            o.connect(g); g.connect(ctx.destination);
+            o.start(); o.stop(ctx.currentTime + 0.05);
+        } catch(e) {}
+    }
+
+    db.ref("System/LastScanTime").on("value", (snapshot) => {
+        if (snapshot.exists()) { playBeep(); }
+    });
+
+    function playAlarm() {
+        if (!audioCtx || alarmOsc || localMute) return;
+        alarmOsc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        alarmOsc.type = 'sawtooth';
+        alarmOsc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        alarmOsc.connect(gain); gain.connect(audioCtx.destination);
+        alarmOsc.start();
+        setInterval(() => { if(alarmOsc && !localMute) { alarmOsc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.4); alarmOsc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.8); } }, 800);
+    }
+
+    function stopAlarm() { if (alarmOsc) { alarmOsc.stop(); alarmOsc = null; } }
+
+    function toggleMute() {
+        localMute = !localMute;
+        db.ref("System/MutedByAdmin").set(localMute);
+        updateMuteButton();
+        if (localMute) stopAlarm(); else checkAndPlay();
+    }
+
+    function updateMuteButton() {
+        const btn = document.getElementById('mute-btn');
+        btn.innerText = localMute ? "🔊 تشغيل الصوت" : "🔇 كتم الصوت";
+        btn.className = localMute ? "btn-alarm-muted" : "btn-alarm-active";
+    }
+
+    function checkAndPlay() { db.ref("System/AlarmTrigger").once('value', s => { if(s.val() === "ON" && !localMute) playAlarm(); }); }
+
+    db.ref("WMS").on("value", (s) => {
+        const d = s.val() || {};
+        const t = d.Temperature || 0, h = d.Humidity || 0, sm = d.Smoke || 0;
+        document.getElementById('temp').innerText = t;
+        document.getElementById('hum').innerText = h;
+        document.getElementById('smoke-val').innerText = sm;
+        const statusBox = document.getElementById('fire-status'), alertBox = document.getElementById('temp-alert'), alertMsg = document.getElementById('alert-msg');
+        
+        let warnings = [];
+        if(t >= 26) warnings.push("الحرارة مرتفعة");
+        if(h >= 75) warnings.push("الرطوبة عالية");
+        if(sm >= 400) warnings.push("رصد دخان كثيف");
+
+        if(warnings.length > 0) {
+            db.ref("System/AlarmTrigger").set("ON");
+            alertBox.style.display = 'block';
+            alertMsg.innerText = "🚨 " + warnings.join(" | ");
+            statusBox.innerText = warnings[0];
+            statusBox.className = "fw-bold p-2 rounded bg-danger text-white blink";
+        } else {
+            db.ref("System/AlarmTrigger").set("OFF");
+            alertBox.style.display = 'none';
+            statusBox.innerText = "وضع الدخان آمن ✅";
+            statusBox.className = "fw-bold p-2 rounded bg-success text-white";
+        }
+    });
+
+    db.ref("System").on("value", (s) => {
+        const sys = s.val() || {};
+        const trigger = sys.AlarmTrigger === "ON";
+        document.getElementById('mute-btn').style.display = trigger ? 'block' : 'none';
+        if (trigger && !localMute) playAlarm(); else stopAlarm();
+    });
+
+    // متابعة المخزون وتحديث الكاش + تلوين العدادات
+    db.ref("Inventory").on("value", (s) => {
+        const d = s.val() || {};
+        currentInventory = d;
+        ["شواحن", "طابعات", "أحبار", "حواسب", "فارات"].forEach(i => {
+            const qty = d[i] || 0;
+            const el = document.getElementById(`count-${i}`);
+            el.innerText = qty;
+            // تلوين حسب الكمية
+            el.className = 'stock-num';
+            if (qty === 0) el.classList.add('stock-empty');
+            else if (qty <= 3) el.classList.add('stock-low');
+        });
+    });
+
+    db.ref("Logs").limitToLast(10).on("value", (s) => {
+        const d = s.val(); let html = "";
+        if(d) Object.values(d).reverse().forEach(l => { html += `<tr><td><span class="badge ${l.type === 'وارد' ? 'bg-success' : 'bg-danger'}">${l.type}</span></td><td>${l.item}</td><td>${l.qty}</td><td>${l.person}</td><td>${l.time}</td></tr>`; });
+        document.getElementById('logs').innerHTML = html;
+    });
+
+    // ===== نافذة تنبيه نقص المخزون =====
+    function showStockAlert(itemKey, requested, available) {
+        const name = itemNames[itemKey] || itemKey;
+        const detail = document.getElementById('stock-alert-detail');
+        detail.innerHTML =
+            'الصنف: <span>' + name + '</span><br>' +
+            'الكمية المطلوبة للصرف: <span>' + requested + '</span><br>' +
+            'الكمية المتوفرة في المخزون: <span style="color:' + (available === 0 ? '#ef4444' : '#f97316') + '">' + available + '</span><br><br>' +
+            '<strong style="color:#f97316">لا يمكن إتمام عملية الصرف ❌</strong>';
+
+        var overlay = document.getElementById('stock-alert-overlay');
+        overlay.style.display = '-webkit-flex';
+        overlay.style.display = 'flex';
+        overlay.classList.add('show');
+
+        // تنبيه اهتزاز على الجوال
+        if (navigator.vibrate) { navigator.vibrate([200, 100, 200, 100, 400]); }
+
+        // تنبيه صوتي بسيط
+        try {
+            var ctx2 = new (window.AudioContext || window.webkitAudioContext)();
+            var o2 = ctx2.createOscillator();
+            var g2 = ctx2.createGain();
+            o2.type = 'square';
+            o2.frequency.setValueAtTime(300, ctx2.currentTime);
+            g2.gain.setValueAtTime(0.3, ctx2.currentTime);
+            g2.gain.exponentialRampToValueAtTime(0.001, ctx2.currentTime + 0.6);
+            o2.connect(g2); g2.connect(ctx2.destination);
+            o2.start(); o2.stop(ctx2.currentTime + 0.6);
+        } catch(e) {}
+    }
+
+    function closeStockAlert() {
+        var overlay = document.getElementById('stock-alert-overlay');
+        overlay.classList.remove('show');
+        overlay.style.display = 'none';
+    }
+
+    // ===== التحقق من الكمية قبل الصرف =====
+    function checkStock(itemKey, qty) {
+        const available = currentInventory[itemKey] || 0;
+        if (qty > available) {
+            showStockAlert(itemKey, qty, available);
+            return false; // منع الصرف
+        }
+        return true; // الكمية كافية، تابع
+    }
+
+    function startScanner() {
+        isScanning = true;
+        document.getElementById('rescanButton').style.display = 'none';
+        if (scannerObj) { scannerObj.clear(); }
+        scannerObj = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        scannerObj.render((text) => {
+            if (isScanning) {
+                isScanning = false;
+                db.ref("System/LastScanTime").set(firebase.database.ServerValue.TIMESTAMP);
+                let p = text.split(',');
+                if(p.length === 4) {
+                    const itemKey = p[0].trim();
+                    const qty = parseInt(p[1].trim()) || 0;
+                    const person = p[2].trim();
+                    const type = p[3].trim();
+
+                    document.getElementById('itemSelect').value = itemKey;
+                    document.getElementById('qty').value = qty;
+                    document.getElementById('personName').value = person;
+
+                    // إذا منصرف: جيب الكمية مباشرة من Firebase (مو من الكاش)
+                    if (type === 'منصرف') {
+                        db.ref(`Inventory/${itemKey}`).once('value', (snap) => {
+                            const available = snap.val() || 0;
+                            if (qty > available) {
+                                showStockAlert(itemKey, qty, available);
+                                // أعد تفعيل زر المسح بدل ما تعلق الصفحة
+                                scannerObj.clear().then(() => {
+                                    document.getElementById('rescanButton').style.display = 'block';
+                                });
+                            } else {
+                                // الكمية كافية — اشتغل
+                                doSendToFirebase(itemKey, qty, person, type);
+                                scannerObj.clear().then(() => {
+                                    document.getElementById('rescanButton').style.display = 'block';
+                                });
+                            }
+                        });
+                    } else {
+                        // وارد — ما يحتاج تحقق
+                        doSendToFirebase(itemKey, qty, person, type);
+                        scannerObj.clear().then(() => {
+                            document.getElementById('rescanButton').style.display = 'block';
+                        });
+                    }
+                } else {
+                    alert("خطأ في صيغة الباركود!");
+                    isScanning = true;
+                }
+            }
+        });
+    }
+
+    window.onload = () => { startScanner(); };
+
+    // دالة الكتابة الفعلية لـ Firebase — لا تسمح بالسالب أبداً
+    function doSendToFirebase(itemKey, qty, person, type) {
+        if (type === 'منصرف') {
+            db.ref("Inventory/" + itemKey).transaction(function(current) {
+                var now = current || 0;
+                if (qty > now) return; // إلغاء: كمية غير كافية
+                return now - qty;
+            }, function(error, committed) {
+                if (!error && committed) {
+                    db.ref("Logs").push({ item: itemKey, qty: qty, person: person || "سالم", type: type, time: new Date().toLocaleTimeString('ar-SA') });
+                } else if (!committed) {
+                    db.ref("Inventory/" + itemKey).once('value', function(snap) {
+                        showStockAlert(itemKey, qty, snap.val() || 0);
+                    });
+                }
+            });
+        } else {
+            db.ref("Inventory/" + itemKey).transaction(function(c) { return (c || 0) + qty; });
+            db.ref("Logs").push({ item: itemKey, qty: qty, person: person || "سالم", type: type, time: new Date().toLocaleTimeString('ar-SA') });
+        }
+    }
+
+    // زر الصرف/الوارد اليدوي
+    function sendToFirebase(type) {
+        var i = document.getElementById('itemSelect').value;
+        var q = parseInt(document.getElementById('qty').value) || 0;
+        var person = document.getElementById('personName').value || "سالم";
+        if (type === 'منصرف') {
+            db.ref("Inventory/" + i).once('value', function(snap) {
+                var available = snap.val() || 0;
+                if (q > available) { showStockAlert(i, q, available); }
+                else { doSendToFirebase(i, q, person, type); }
+            });
+        } else {
+            doSendToFirebase(i, q, person, type);
+        }
+    }
+
+    function clearAllData() { if(confirm("تصفير؟")) { db.ref("Inventory").remove(); db.ref("Logs").remove().then(function() { location.reload(); }); } }
+</script>
+</body>
+</html>
