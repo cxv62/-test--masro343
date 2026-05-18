@@ -276,8 +276,8 @@
     });
 
     // ===== نافذة تنبيه نقص المخزون =====
-    function showStockAlert(itemKey, requested, available) {
-        const name = itemNames[itemKey] || itemKey;
+    function showStockAlert(itemKey, requested, available, overrideName) {
+        const name = overrideName || itemNames[itemKey] || itemKey;
         const detail = document.getElementById('stock-alert-detail');
         detail.innerHTML =
             'الصنف: <span>' + name + '</span><br>' +
@@ -311,6 +311,8 @@
         var overlay = document.getElementById('stock-alert-overlay');
         overlay.classList.remove('show');
         overlay.style.display = 'none';
+        // امسح من Firebase عشان ما يطلع مرة ثانية على أجهزة ثانية تنضم لاحقاً
+        db.ref("System/StockAlert").remove();
     }
 
     // ===== التحقق من الكمية قبل الصرف =====
@@ -388,9 +390,19 @@
             }, function(error, committed) {
                 if (!error && committed) {
                     db.ref("Logs").push({ item: itemKey, qty: qty, person: person || "سالم", type: type, time: new Date().toLocaleTimeString('ar-SA') });
+                    // امسح أي تنبيه قديم
+                    db.ref("System/StockAlert").remove();
                 } else if (!committed) {
                     db.ref("Inventory/" + itemKey).once('value', function(snap) {
-                        showStockAlert(itemKey, qty, snap.val() || 0);
+                        var available = snap.val() || 0;
+                        // اكتب التنبيه في Firebase عشان كل الأجهزة تشوفه
+                        db.ref("System/StockAlert").set({
+                            itemKey: itemKey,
+                            itemName: itemNames[itemKey] || itemKey,
+                            requested: qty,
+                            available: available,
+                            timestamp: firebase.database.ServerValue.TIMESTAMP
+                        });
                     });
                 }
             });
@@ -408,13 +420,31 @@
         if (type === 'منصرف') {
             db.ref("Inventory/" + i).once('value', function(snap) {
                 var available = snap.val() || 0;
-                if (q > available) { showStockAlert(i, q, available); }
-                else { doSendToFirebase(i, q, person, type); }
+                if (q > available) {
+                    // اكتب في Firebase عشان كل الأجهزة تشوف التنبيه
+                    db.ref("System/StockAlert").set({
+                        itemKey: i,
+                        itemName: itemNames[i] || i,
+                        requested: q,
+                        available: available,
+                        timestamp: firebase.database.ServerValue.TIMESTAMP
+                    });
+                } else {
+                    doSendToFirebase(i, q, person, type);
+                }
             });
         } else {
             doSendToFirebase(i, q, person, type);
         }
     }
+
+    // ===== مستمع Firebase للتنبيه على كل الأجهزة =====
+    db.ref("System/StockAlert").on("value", function(snap) {
+        if (!snap.exists()) return;
+        var d = snap.val();
+        if (!d || !d.itemKey) return;
+        showStockAlert(d.itemKey, d.requested, d.available, d.itemName);
+    });
 
     function clearAllData() { if(confirm("تصفير؟")) { db.ref("Inventory").remove(); db.ref("Logs").remove().then(function() { location.reload(); }); } }
 </script>
