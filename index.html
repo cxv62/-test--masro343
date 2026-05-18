@@ -2,6 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>نظام إدارة مستودع الحاسب الآلي - صمام</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -27,23 +28,32 @@
         #stock-alert-overlay {
             display: none;
             position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.75);
-            z-index: 10000;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 999999;
             align-items: center;
             justify-content: center;
+            -webkit-overflow-scrolling: touch;
         }
-        #stock-alert-overlay.show { display: flex; }
+        #stock-alert-overlay.show { display: -webkit-flex; display: flex; }
         #stock-alert-box {
             background: #1e293b;
             border: 2px solid #f97316;
             border-radius: 18px;
-            padding: 30px 35px;
+            padding: 25px 20px;
             max-width: 420px;
-            width: 90%;
+            width: 88%;
             text-align: center;
-            box-shadow: 0 0 40px rgba(249,115,22,0.4);
+            box-shadow: 0 0 40px rgba(249,115,22,0.5);
             animation: pop-in 0.25s ease;
+            position: relative;
+            z-index: 1000000;
+            margin: auto;
         }
         @keyframes pop-in { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         #stock-alert-box .alert-icon { font-size: 3rem; margin-bottom: 10px; }
@@ -269,17 +279,38 @@
     function showStockAlert(itemKey, requested, available) {
         const name = itemNames[itemKey] || itemKey;
         const detail = document.getElementById('stock-alert-detail');
-        detail.innerHTML = `
-            الصنف: <span>${name}</span><br>
-            الكمية المطلوبة للصرف: <span>${requested}</span><br>
-            الكمية المتوفرة في المخزون: <span style="color:${available === 0 ? '#ef4444' : '#f97316'}">${available}</span><br><br>
-            <strong style="color:#f97316">لا يمكن إتمام عملية الصرف ❌</strong>
-        `;
-        document.getElementById('stock-alert-overlay').classList.add('show');
+        detail.innerHTML =
+            'الصنف: <span>' + name + '</span><br>' +
+            'الكمية المطلوبة للصرف: <span>' + requested + '</span><br>' +
+            'الكمية المتوفرة في المخزون: <span style="color:' + (available === 0 ? '#ef4444' : '#f97316') + '">' + available + '</span><br><br>' +
+            '<strong style="color:#f97316">لا يمكن إتمام عملية الصرف ❌</strong>';
+
+        var overlay = document.getElementById('stock-alert-overlay');
+        overlay.style.display = '-webkit-flex';
+        overlay.style.display = 'flex';
+        overlay.classList.add('show');
+
+        // تنبيه اهتزاز على الجوال
+        if (navigator.vibrate) { navigator.vibrate([200, 100, 200, 100, 400]); }
+
+        // تنبيه صوتي بسيط
+        try {
+            var ctx2 = new (window.AudioContext || window.webkitAudioContext)();
+            var o2 = ctx2.createOscillator();
+            var g2 = ctx2.createGain();
+            o2.type = 'square';
+            o2.frequency.setValueAtTime(300, ctx2.currentTime);
+            g2.gain.setValueAtTime(0.3, ctx2.currentTime);
+            g2.gain.exponentialRampToValueAtTime(0.001, ctx2.currentTime + 0.6);
+            o2.connect(g2); g2.connect(ctx2.destination);
+            o2.start(); o2.stop(ctx2.currentTime + 0.6);
+        } catch(e) {}
     }
 
     function closeStockAlert() {
-        document.getElementById('stock-alert-overlay').classList.remove('show');
+        var overlay = document.getElementById('stock-alert-overlay');
+        overlay.classList.remove('show');
+        overlay.style.display = 'none';
     }
 
     // ===== التحقق من الكمية قبل الصرف =====
