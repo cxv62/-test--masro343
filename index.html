@@ -347,18 +347,23 @@
 
                     // إذا منصرف: جيب الكمية مباشرة من Firebase (مو من الكاش)
                     if (type === 'منصرف') {
-                        db.ref(`Inventory/${itemKey}`).once('value', (snap) => {
-                            const available = snap.val() || 0;
+                        db.ref("Inventory/" + itemKey).once('value', function(snap) {
+                            var available = snap.val() || 0;
                             if (qty > available) {
-                                showStockAlert(itemKey, qty, available);
-                                // أعد تفعيل زر المسح بدل ما تعلق الصفحة
-                                scannerObj.clear().then(() => {
+                                // اكتب في Firebase — كل الأجهزة تشوف التنبيه
+                                db.ref("System/StockAlert").set({
+                                    itemKey: itemKey,
+                                    itemName: itemNames[itemKey] || itemKey,
+                                    requested: qty,
+                                    available: available,
+                                    timestamp: Date.now()
+                                });
+                                scannerObj.clear().then(function() {
                                     document.getElementById('rescanButton').style.display = 'block';
                                 });
                             } else {
-                                // الكمية كافية — اشتغل
                                 doSendToFirebase(itemKey, qty, person, type);
-                                scannerObj.clear().then(() => {
+                                scannerObj.clear().then(function() {
                                     document.getElementById('rescanButton').style.display = 'block';
                                 });
                             }
