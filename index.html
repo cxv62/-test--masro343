@@ -347,10 +347,26 @@
 
     window.onload = () => { startScanner(); };
 
-    // دالة الكتابة الفعلية لـ Firebase
+    // دالة الكتابة الفعلية لـ Firebase — لا تسمح بالسالب أبداً
     function doSendToFirebase(itemKey, qty, person, type) {
-        db.ref("Inventory/" + itemKey).transaction(function(c) { return type === 'وارد' ? (c||0)+qty : (c||0)-qty; });
-        db.ref("Logs").push({ item: itemKey, qty: qty, person: person || "سالم", type: type, time: new Date().toLocaleTimeString('ar-SA') });
+        if (type === 'منصرف') {
+            db.ref("Inventory/" + itemKey).transaction(function(current) {
+                var now = current || 0;
+                if (qty > now) return; // إلغاء: كمية غير كافية
+                return now - qty;
+            }, function(error, committed) {
+                if (!error && committed) {
+                    db.ref("Logs").push({ item: itemKey, qty: qty, person: person || "سالم", type: type, time: new Date().toLocaleTimeString('ar-SA') });
+                } else if (!committed) {
+                    db.ref("Inventory/" + itemKey).once('value', function(snap) {
+                        showStockAlert(itemKey, qty, snap.val() || 0);
+                    });
+                }
+            });
+        } else {
+            db.ref("Inventory/" + itemKey).transaction(function(c) { return (c || 0) + qty; });
+            db.ref("Logs").push({ item: itemKey, qty: qty, person: person || "سالم", type: type, time: new Date().toLocaleTimeString('ar-SA') });
+        }
     }
 
     // زر الصرف/الوارد اليدوي
